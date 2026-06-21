@@ -265,12 +265,21 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
 </div>
 
 <script>
-/* ---------------- storage ---------------- */
-const Store={mem:{},real:(typeof window!=='undefined'&&window.storage&&typeof window.storage.get==='function'),
- async get(k){if(this.real){try{const r=await window.storage.get(k);return r?r.value:null}catch(e){return null}}return (k in this.mem)?this.mem[k]:null},
- async set(k,v){if(this.real){try{await window.storage.set(k,v)}catch(e){}}this.mem[k]=v},
- async list(p){if(this.real){try{const r=await window.storage.list(p);return r?r.keys:[]}catch(e){return []}}return Object.keys(this.mem).filter(k=>k.startsWith(p))}};
-document.getElementById('storenote').textContent=Store.real?'Saved inspections persist on this device.':'Preview mode — saves last only this session. Persists as an installed app.';
+/* ---------------- storage (window.storage in Claude preview → localStorage on a real site → memory) ---------------- */
+const Store=(function(){
+ const hasWS=(typeof window!=='undefined'&&window.storage&&typeof window.storage.get==='function');
+ let hasLS=false;try{const t='__hg__';localStorage.setItem(t,'1');localStorage.removeItem(t);hasLS=true}catch(e){}
+ const mode=hasWS?'ws':(hasLS?'ls':'mem'),mem={};
+ return {mode,persists:mode!=='mem',
+  async get(k){if(mode==='ws'){try{const r=await window.storage.get(k);return r?r.value:null}catch(e){return null}}
+   if(mode==='ls')return localStorage.getItem(k);return (k in mem)?mem[k]:null},
+  async set(k,v){if(mode==='ws'){try{await window.storage.set(k,v)}catch(e){}}
+   else if(mode==='ls'){try{localStorage.setItem(k,v)}catch(e){}}else mem[k]=v},
+  async list(p){if(mode==='ws'){try{const r=await window.storage.list(p);return r?r.keys:[]}catch(e){return []}}
+   if(mode==='ls'){const o=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(p))o.push(k)}return o}
+   return Object.keys(mem).filter(k=>k.startsWith(p))}};
+})();
+document.getElementById('storenote').textContent=Store.persists?'Saved inspections persist on this device.':'Temporary session — saving unavailable in this context.';
 
 /* ---------------- helpers ---------------- */
 const cssVar=v=>getComputedStyle(document.documentElement).getPropertyValue(v.replace(/var\(|\)/g,'')).trim();
