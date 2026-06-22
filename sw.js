@@ -1,5 +1,5 @@
 // HiveGrade service worker — network-first so updates always win online, cache for offline
-const CACHE = 'hivegrade-v3';
+const CACHE = 'hivegrade-v4';
 const ASSETS = ['./','./index.html','./manifest.json','./icon-192.png','./icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
