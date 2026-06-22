@@ -138,7 +138,7 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
 .rbtns{display:flex;gap:8px;padding:14px 34px 22px}
 .config{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:12.5px;color:var(--ink-dim)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
-@media print{ body *{visibility:hidden} #reportOverlay,#reportOverlay *{visibility:visible} #reportOverlay{position:absolute;inset:0;background:#fff;display:block;padding:0} .report{box-shadow:none;max-height:none} .rbtns{display:none} }
+@media print{ @page{margin:11mm} body *{visibility:hidden} #reportOverlay,#reportOverlay *{visibility:visible;-webkit-print-color-adjust:exact;print-color-adjust:exact} #reportOverlay{position:absolute;inset:0;background:#fff;display:block;padding:0} .report{box-shadow:none;max-height:none;width:100%;border-radius:0;background:#fff} .rpt-inner{padding:0} .rbtns{display:none} h1{margin-top:0} .rpt-grade,.rpt-chips,.rpt-sec,.rpt-foot{page-break-inside:avoid} }
 .lrn{color:var(--amber-soft,#e0b552);text-decoration:none;font-size:12px;white-space:nowrap}
 .lrn:hover{text-decoration:underline}
 .btn.danger{background:var(--brick);border-color:var(--brick);color:#fff}
@@ -166,6 +166,8 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
       <button class="btn ghost" id="btnHive" data-tour="hive">Hive &amp; colors</button>
       <button class="btn ghost" id="btnNew">New inspection</button>
       <button class="btn ghost" id="btnJSON" data-tour="summarize">Summarize</button>
+      <button class="btn ghost" id="btnExport">Export</button>
+      <button class="btn ghost" id="btnImport">Import</button>
       <button class="btn ghost" id="btnReport" data-tour="report">Report</button>
       <button class="btn primary" id="btnSave">Save inspection</button>
     </div>
@@ -512,7 +514,7 @@ function recommend(){const m=compute(),s=stageFor(state.date,hemi),r=[];
  else if(storesShort){ if(cold) r.push({p:'soon',a:'Feed 2:1 syrup',w:`stores are light going into the cold — build them up while they'll still take it down.`}); else r.push({p:'soon',a:'Feed 1:1 syrup',w:`stores are light for the season; 1:1 keeps them fed and gets comb drawn.`}); }
  if(pollenShort&&m.brood>0) r.push({p:'soon',a:'Add a pollen sub / protein patty',w:`pollen's short for the brood they're carrying — protein keeps brood-rearing going.`});
  if((s.id==='swarm'||s.id==='buildup')&&m.broodPct>55&&(m.t.em/(m.drawn||1))<0.1) r.push({p:'soon',a:'Give them room or split',w:`packed brood nest in swarm season — add space or split before they decide for you.`});
- if(s.id==='flow'&&!storesShort) r.push({p:'routine',a:'Keep supers on, pull capped frames',w:`flow's on — give them room to put it and harvest once frames are capped.`});
+ if(s.id==='flow'&&!storesShort){ if(m.honeyLb>=25) r.push({p:'routine',a:'Keep the super on; pull frames as they cap',w:`flow's on and ~${Math.round(m.honeyLb)} lb is capped — harvest fully capped frames and keep giving them room.`}); else r.push({p:'routine',a:'Keep the super on, give them room',w:`flow's on but only ~${Math.round(m.honeyLb)} lb is capped so far — let them fill and cap before any harvest.`}); }
  if(!r.some(x=>x.p!=='routine')){const next={overwinter:`Leave them alone. Heft for weight, keep top ventilation open, don't crack the lid in the cold.`,latewinter:`Watch stores hard — this is the starvation window. First pollen's coming.`,buildup:`Looking good. Watch for swarm cells as they fill out and stay ahead of space.`,swarm:`On track. Inspect weekly for swarm cells and keep ahead of congestion.`,flow:`On track. Keep supers on and harvest when frames are capped.`,dearth:`Wrap up mite treatment and feeding — you're raising winter bees now.`,fallprep:`Push stores toward ~60 lb and get one last mite check in before it turns cold.`};
    r.push({p:'routine',a:`On track for ${s.name.toLowerCase()}`,w:next[s.id]||`Keep monitoring.`});}
  const SRCMAP=[['Treat for mites','mites_treat'],['Re-test mites','mites_monitor'],['Swarm is imminent','swarm'],['Swarm prep','swarm'],['Give them room','swarm'],['Feed','feed'],['Add a pollen','pollen']];
@@ -624,9 +626,13 @@ function openReport(){const g=grade(),m=g.m;const f=x=>x.toFixed(1);const denom=
  const mc=m.mitePct,mStat=mc>=3?['#8c1d1d','over threshold']:mc>=2?['#9a6a1c','climbing']:state.bees>0?['#2e7d32','in range']:['#7a6a4e','no wash'];
  const laying=state.queenSeen||state.eggsSeen||m.t.ob>0;
  const qStat=laying?['#2e7d32','laying confirmed']:(g.s.layExp?['#8c1d1d','not confirmed']:['#7a6a4e','brood dormant']);
- const sStat=state.cellS==='capped'?['#8c1d1d','capped cells']:state.cellS==='charged'?['#8c1d1d','charged cells']:(state.cellS==='cups'&&state.cellN>0)?['#9a6a1c','dry cups']:['#2e7d32','no cells'];
+ const cellN=state.cellN||0;let sVal,sStat;
+ if(state.cellS==='capped'){sVal='Capped';sStat=['#8c1d1d','imminent — split']}
+ else if(state.cellS==='charged'){sVal='Charged';sStat=['#8c1d1d','clock running']}
+ else if(cellN>0){sVal=cellN+(cellN===1?' cup':' cups');sStat=['#9a6a1c','watch weekly']}
+ else{sVal='None';sStat=['#2e7d32','no cells']}
  const chip=(lbl,val,st)=>`<div class="rpt-chip"><div class="ck">${lbl}</div><div class="cv" style="color:${st[0]}">${val}</div><div class="cs">${st[1]}</div></div>`;
- const fmap=state.boxes.map(b=>{const w=SYSTEMS[b.sys].w;const cells=b.frames.map(fr=>{const segs=STACK.map(k=>{const v=fr.cats[k]||0;return v>0?`<span style="display:block;height:${v}%;background:${cssVar('--c-'+k)}"></span>`:''}).join('');const sum=CATS.reduce((a,c)=>a+(fr.cats[c.k]||0),0);const un=sum<100?`<span style="display:block;height:${100-sum}%;background:repeating-linear-gradient(45deg,#efe7d6,#efe7d6 3px,#e4dac4 3px,#e4dac4 6px)"></span>`:'';return `<div style="flex:1;height:${26+30*w}px;border:1px solid #d8cdb4;border-radius:2px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;background:#efe7d6">${segs}${un}</div>`}).join('');
+ const fmap=[...state.boxes].reverse().map(b=>{const w=SYSTEMS[b.sys].w;const cells=b.frames.map(fr=>{const segs=STACK.map(k=>{const v=fr.cats[k]||0;return v>0?`<span style="display:block;height:${v}%;background:${cssVar('--c-'+k)}"></span>`:''}).join('');const sum=CATS.reduce((a,c)=>a+(fr.cats[c.k]||0),0);const un=sum<100?`<span style="display:block;height:${100-sum}%;background:repeating-linear-gradient(45deg,#efe7d6,#efe7d6 3px,#e4dac4 3px,#e4dac4 6px)"></span>`:'';return `<div style="flex:1;height:${26+30*w}px;border:1px solid #d8cdb4;border-radius:2px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;background:#efe7d6">${segs}${un}</div>`}).join('');
    return `<div style="margin-bottom:8px"><div style="font-family:var(--mono);font-size:9px;color:#8a795c;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">${b.label} · ${SYSTEMS[b.sys].name}</div><div style="display:flex;gap:3px;align-items:flex-end">${cells}</div></div>`}).join('');
  const recs=recommend();const recsHtml=recs.map(x=>{const c=x.p==='urgent'?'#8c1d1d':x.p==='soon'?'#9a6a1c':'#3a6a2e';const lk=x.src&&SRC[x.src]?` <a href="${SRC[x.src].u}" style="color:#9a6a1c">learn more →</a>`:'';return `<li><b style="color:${c}">${x.a}</b>${x.w?' — '+x.w:''}${lk}</li>`}).join('');
  const facRows=['brood','stores','pollen','pattern'].map(k=>`${k[0].toUpperCase()+k.slice(1)} ${Math.round(g.f[k])}/100 (w ${g.s.w[k]})`).join(' · ');
@@ -640,7 +646,7 @@ function openReport(){const g=grade(),m=g.m;const f=x=>x.toFixed(1);const denom=
       <div class="rpt-bar" style="margin-top:9px">${compSpans||'<span style="width:100%;background:#cbbfa6"></span>'}</div>
       <div style="font-family:var(--mono);font-size:9.5px;color:#8a795c;margin-top:5px">brood ${m.broodPct.toFixed(0)}% · stores ${m.storesPct.toFixed(0)}% · pollen ${m.pollenPct.toFixed(0)}% of drawn comb</div>
     </div></div>
-  <div class="rpt-chips">${chip('Queen',laying?'Laying':'Check',qStat)}${chip('Mites',mc.toFixed(2)+'%',mStat)}${chip('Swarm',state.cellN+(state.cellN===1?' cell':' cells'),sStat)}</div>
+  <div class="rpt-chips">${chip('Queen',laying?'Laying':'Check',qStat)}${chip('Mites',mc.toFixed(2)+'%',mStat)}${chip('Swarm',sVal,sStat)}</div>
   <div class="rpt-sec"><h3>Colony numbers</h3><div class="rpt-m">
     <div class="rpt-mc"><div class="k">Frames brood</div><div class="v">${f(m.brood)} DFE</div></div>
     <div class="rpt-mc"><div class="k">Frames stores</div><div class="v">${f(m.stores)} DFE</div></div>
@@ -654,6 +660,8 @@ function openReport(){const g=grade(),m=g.m;const f=x=>x.toFixed(1);const denom=
   <div class="rpt-foot">How this grade was built — factors: ${facRows}. Modifiers: ${modRows}.</div>`;
  document.getElementById('reportOverlay').classList.add('show')}
 document.getElementById('btnReport').onclick=openReport;
+document.getElementById('btnExport').onclick=exportAll;
+document.getElementById('btnImport').onclick=()=>document.getElementById('importFile').click();
 document.getElementById('rptClose').onclick=()=>document.getElementById('reportOverlay').classList.remove('show');
 document.getElementById('rptPrint').onclick=()=>window.print();
 document.getElementById('reportOverlay').onclick=e=>{if(e.target.id==='reportOverlay')document.getElementById('reportOverlay').classList.remove('show')};
