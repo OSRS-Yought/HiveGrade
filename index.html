@@ -141,7 +141,7 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
 .rbtns{display:flex;gap:8px;padding:14px 34px 22px}
 .config{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:12.5px;color:var(--ink-dim)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
-@media print{ @page{margin:11mm} body *{visibility:hidden} #reportOverlay,#reportOverlay *{visibility:visible;-webkit-print-color-adjust:exact;print-color-adjust:exact} #reportOverlay{position:absolute;inset:0;background:#fff;display:block;padding:0} .report{box-shadow:none;max-height:none;width:100%;border-radius:0;background:#fff} .rpt-inner{padding:0} .rbtns{display:none} h1{margin-top:0} .rpt-grade,.rpt-chips,.rpt-sec,.rpt-foot{page-break-inside:avoid} }
+@media print{ @page{margin:10mm} html,body{height:auto!important;overflow:visible!important;background:#fff!important} body>*:not(#reportOverlay){display:none!important} #reportOverlay{position:static!important;display:block!important;inset:auto!important;padding:0!important;background:#fff!important} #reportOverlay *{-webkit-print-color-adjust:exact;print-color-adjust:exact} .report{position:static!important;max-height:none!important;overflow:visible!important;width:100%!important;box-shadow:none!important;border-radius:0!important;background:#fff!important} .rpt-inner{padding:0!important} .rbtns{display:none!important} .rpt-grade,.rpt-chips,.rpt-sec,.rpt-foot{page-break-inside:avoid} }
 .lrn{color:var(--amber-soft,#e0b552);text-decoration:none;font-size:12px;white-space:nowrap}
 .lrn:hover{text-decoration:underline}
 .btn.danger{background:var(--brick);border-color:var(--brick);color:#fff}
@@ -154,10 +154,30 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
 .rpt-chip .ck{font-family:var(--mono);font-size:9px;color:#8a795c;text-transform:uppercase;letter-spacing:.05em}
 .rpt-chip .cv{font-size:15px;font-weight:700;margin-top:3px;font-family:var(--disp)}
 .rpt-chip .cs{font-size:10.5px;color:#6a5a3e;margin-top:1px}
+/* apiary */
+.ap-top{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:22px}
+.ap-top h1{font-size:30px;letter-spacing:-.01em;line-height:1;margin-top:2px}.ap-top h1 .hl{color:var(--amber)}
+.ap-top .sub{color:var(--ink-dim);font-size:13px;margin-top:6px}
+.ap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+.ap-card{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 12px 13px;cursor:pointer;transition:border-color .15s,transform .12s;text-align:center}
+.ap-card:hover{border-color:var(--amber-soft);transform:translateY(-2px)}
+.ap-port{height:122px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:10px}
+.ap-port svg{max-height:122px;width:auto}
+.ap-name{font-family:var(--disp);font-weight:500;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ap-meta{display:flex;align-items:baseline;justify-content:center;gap:8px;margin-top:5px}
+.ap-grade{font-family:var(--disp);font-weight:700;font-size:18px;line-height:1}
+.ap-sub{font-family:var(--mono);font-size:10px;color:var(--ink-faint)}
+.ap-del{position:absolute;top:6px;right:7px;background:transparent;border:none;color:var(--ink-faint);font-size:16px;line-height:1;padding:2px 5px;border-radius:5px;opacity:0;transition:opacity .15s}
+.ap-card:hover .ap-del{opacity:1}.ap-del:hover{color:#fff;background:var(--brick)}
+.ap-add-card{background:transparent;border:1.5px dashed var(--line);border-radius:12px;color:var(--ink-dim);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:185px;font-family:var(--body);font-size:13px;transition:border-color .15s,color .15s}
+.ap-add-card:hover{border-color:var(--amber-soft);color:var(--amber-soft)}
+.ap-plus{font-size:30px;font-weight:300;line-height:1}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div id="apiaryView"></div>
+  <div id="inspectView" style="display:none">
   <header class="top">
     <div>
       <div class="eyebrow">Data-driven colony grading</div>
@@ -166,11 +186,10 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
       <div class="storenote" id="storenote"></div>
     </div>
     <div class="toolbar">
+      <button class="btn ghost" id="btnApiary">← Apiary</button>
       <button class="btn ghost" id="btnHive" data-tour="hive">Hive &amp; colors</button>
       <button class="btn ghost" id="btnNew">New inspection</button>
       <button class="btn ghost" id="btnJSON" data-tour="summarize">Summarize</button>
-      <button class="btn ghost" id="btnExport">Export</button>
-      <button class="btn ghost" id="btnImport">Import</button>
       <button class="btn ghost" id="btnReport" data-tour="report">Report</button>
       <button class="btn primary" id="btnSave">Save inspection</button>
     </div>
@@ -244,6 +263,7 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
       </div>
     </div>
   </div>
+  </div><!--inspectView-->
 </div>
 
 <!-- frame editor -->
@@ -592,10 +612,12 @@ document.getElementById('btnHive').onclick=openCfg;document.getElementById('btnH
 
 /* ---------------- save / history ---------------- */
 function gradeOf(s){const saved=state;state=s;const g=grade();state=saved;return g}
-async function saveInspection(){await Store.set(`hivegrade:insp:${state.hive}:${state.date}`,JSON.stringify(state));await loadHistory();
+async function saveInspection(){await Store.set(`hivegrade:insp:${state.hive}:${state.date}`,JSON.stringify(state));
+ await saveHive({name:state.hive,hemi,boxes:state.boxes.map(b=>({sys:b.sys,frames:b.frames.length,label:b.label,body:b.body,accent:b.accent})),cover:state.cover||null,bottom:state.bottom||null});
+ await loadHistory();
  const b=document.getElementById('btnSave'),o=b.textContent;b.textContent='Saved ✓';setTimeout(()=>b.textContent=o,1300)}
 document.getElementById('btnSave').onclick=saveInspection;
-async function loadHistory(){const keys=await Store.list('hivegrade:insp:');const items=[];
+async function loadHistory(){if(!state)return;const pre='hivegrade:insp:'+state.hive+':';const keys=(await Store.list('hivegrade:insp:')).filter(k=>k.indexOf(pre)===0);const items=[];
  for(const k of keys){const raw=await Store.get(k);if(raw){try{const s=JSON.parse(raw);const g=gradeOf(s);items.push({date:s.date,hive:s.hive,grade:g.lc,brood:g.m.brood,stores:g.m.stores,mite:g.m.mitePct})}catch(e){}}}
  items.sort((a,b)=>a.date.localeCompare(b.date));const body=document.getElementById('histBody');
  if(!items.length){body.innerHTML='<tr><td colspan="5" class="faint">No inspections saved yet — log frames, then Save.</td></tr>';document.getElementById('sparkWrap').style.display='none';return}
@@ -663,8 +685,7 @@ function openReport(){const g=grade(),m=g.m;const f=x=>x.toFixed(1);const denom=
   <div class="rpt-foot">How this grade was built — factors: ${facRows}. Modifiers: ${modRows}.</div>`;
  document.getElementById('reportOverlay').classList.add('show')}
 document.getElementById('btnReport').onclick=openReport;
-document.getElementById('btnExport').onclick=exportAll;
-document.getElementById('btnImport').onclick=()=>document.getElementById('importFile').click();
+document.getElementById('btnApiary').onclick=()=>showApiary();
 document.getElementById('rptClose').onclick=()=>document.getElementById('reportOverlay').classList.remove('show');
 document.getElementById('rptPrint').onclick=()=>window.print();
 document.getElementById('reportOverlay').onclick=e=>{if(e.target.id==='reportOverlay')document.getElementById('reportOverlay').classList.remove('show')};
@@ -700,10 +721,82 @@ document.getElementById('importFile').onchange=e=>{const file=e.target.files[0];
  rd.readAsText(file);e.target.value=''};
 document.getElementById('btnNew').onclick=()=>{if(!confirm('Start a fresh inspection? Unsaved frame data clears.'))return;const boxes=state.boxes.map(b=>{const nb=mkBox(b.sys,b.label);nb.body=b.body;nb.accent=b.accent;nb.frames=Array.from({length:b.frames.length},(_,i)=>blankFrame(i+1));return nb});state=defaultState();state.boxes=boxes;bindHeader();render()};
 
+/* ---------------- apiary ---------------- */
+function shadeSafe(c,p){try{return shade(c,p)}catch(e){return c}}
+function portraitSVG(boxes,cover,bottom){
+ if(!boxes||!boxes.length)boxes=[{sys:'generic'}];
+ const W=120,pad=11,bw=W-pad*2,dH={deep:34,med:24,shallow:18};
+ const order=[...boxes].reverse();const topSys=SYSTEMS[order[0].sys]||SYSTEMS.generic;
+ const anyApi=boxes.some(b=>((SYSTEMS[b.sys]||{}).shape)==='apimaye');
+ const cType=(cover&&cover.type)||(topSys.shape==='apimaye'?'apimaye':'tele');
+ const cColor=(cover&&cover.color)||(cType==='apimaye'?'#b9533a':shadeSafe(topSys.body,-22));
+ const bType=(bottom&&bottom.type)||(anyApi?'apimaye':'wood');
+ const bColor=(bottom&&bottom.color)||(bType==='apimaye'?'#243766':'#9a7b4f');
+ const cH=12,btH=11;let y=2,p='';
+ if(cType==='apimaye')p+=`<rect x="${pad-3}" y="${y}" width="${bw+6}" height="${cH}" rx="3" fill="${cColor}"/><rect x="${pad+3}" y="${y+3.5}" width="${bw-6}" height="2.4" rx="1.2" fill="#0003"/>`;
+ else if(cType==='gable')p+=`<path d="M${pad-3} ${y+cH} L${W/2} ${y-1} L${bw+pad+3} ${y+cH} Z" fill="${cColor}"/>`;
+ else p+=`<rect x="${pad-3}" y="${y}" width="${bw+6}" height="${cH}" rx="1.5" fill="${cColor}"/>`;
+ y+=cH+1;
+ order.forEach(b=>{const s=SYSTEMS[b.sys]||SYSTEMS.generic;const h=dH[s.depth]||30;const body=b.body||s.body;const acc=b.accent||s.accent;
+  p+=`<rect x="${pad}" y="${y}" width="${bw}" height="${h}" rx="${s.shape==='poly'?5:2}" fill="${body}" stroke="#0005"/>`;
+  if(s.shape==='apimaye'){if(s.depth==='deep')p+=`<circle cx="${W/2}" cy="${y+h/2}" r="3.4" fill="${acc}"/>`;p+=[0.3,0.52,0.74].map(fx=>`<line x1="${pad+4}" y1="${y+h*fx}" x2="${pad+bw-4}" y2="${y+h*fx}" stroke="#0000001a" stroke-width="1"/>`).join('');}
+  else if(s.shape==='flow_super')p+=[0.2,0.34,0.48,0.62,0.76].map(fx=>`<line x1="${pad+bw*fx}" y1="${y+3}" x2="${pad+bw*fx}" y2="${y+h-3}" stroke="#00000026" stroke-width="1.4"/>`).join('');
+  else if(s.shape==='flow_box')p+=`<path d="M${pad+bw*0.4} ${y+h*0.42} L${W/2} ${y+h*0.62} L${pad+bw*0.6} ${y+h*0.42}" fill="none" stroke="#00000033" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>`;
+  else if(s.shape==='poly')p+=`<rect x="${W/2-9}" y="${y+h/2-2}" width="18" height="3.4" rx="1.7" fill="#0000001a"/>`;
+  else p+=`<rect x="${W/2-9}" y="${y+h/2-2}" width="18" height="4" rx="2" fill="#00000026"/>`;
+  y+=h;});
+ if(bType==='apimaye')p+=`<rect x="${pad-2}" y="${y}" width="${bw+4}" height="${btH}" rx="2" fill="${shadeSafe(bColor,28)}"/><rect x="${W/2-7}" y="${y+btH-4}" width="14" height="3" rx="1.5" fill="${bColor}"/>`;
+ else p+=`<rect x="${pad-2}" y="${y}" width="${bw+4}" height="${btH}" rx="1.5" fill="${bColor}"/><rect x="${pad+2}" y="${y+btH-2.5}" width="${bw-4}" height="2.5" fill="#0003"/>`;
+ y+=btH;
+ return `<svg viewBox="0 0 ${W} ${y+2}" width="100%" xmlns="http://www.w3.org/2000/svg">${p}</svg>`;
+}
+function mkBoxFrom(b){const nb=newBox(b.sys||'lang_deep');nb.label=b.label||SYSTEMS[nb.sys].name;nb.body=b.body||SYSTEMS[nb.sys].body;nb.accent=b.accent||SYSTEMS[nb.sys].accent;const n=Math.max(1,b.frames||SYSTEMS[nb.sys].frames);nb.frames=Array.from({length:n},(_,i)=>blankFrame(i+1));return nb}
+async function saveHive(h){await Store.set('hivegrade:hive:'+h.name,JSON.stringify(h))}
+async function gatherApiary(){const hives={};
+ for(const k of await Store.list('hivegrade:hive:')){const raw=await Store.get(k);if(raw){try{const h=JSON.parse(raw);hives[h.name]={name:h.name,boxes:h.boxes,cover:h.cover,bottom:h.bottom,count:0,latestDate:null,latestGrade:null}}catch(e){}}}
+ const byHive={};
+ for(const k of await Store.list('hivegrade:insp:')){const raw=await Store.get(k);if(raw){try{const s=JSON.parse(raw);(byHive[s.hive]=byHive[s.hive]||[]).push(s)}catch(e){}}}
+ Object.keys(byHive).forEach(name=>{const list=byHive[name].sort((a,b)=>a.date.localeCompare(b.date)),last=list[list.length-1];
+  const h=hives[name]||(hives[name]={name});h.count=list.length;
+  if(!h.boxes){h.boxes=last.boxes;h.cover=last.cover;h.bottom=last.bottom}
+  const g=gradeOf(last);h.latestGrade=g.lc;h.latestDate=last.date;});
+ return Object.values(hives).sort((a,b)=>(b.latestDate||'').localeCompare(a.latestDate||'')||a.name.localeCompare(b.name));
+}
+async function renderApiary(){const host=document.getElementById('apiaryView');if(!host)return;const hives=await gatherApiary();
+ const cards=hives.map(h=>{const portrait=portraitSVG(h.boxes||[],h.cover,h.bottom);
+  const badge=h.latestGrade?`<span class="ap-grade" style="color:${h.latestGrade.color}">${h.latestGrade.letter}</span>`:`<span class="ap-grade faint">—</span>`;
+  const sub=h.latestDate?`${daysAgo(h.latestDate)} · ${h.count} log${h.count===1?'':'s'}`:'no inspections yet';
+  return `<div class="ap-card" data-open="${encodeURIComponent(h.name)}"><button class="ap-del" data-del="${encodeURIComponent(h.name)}" title="Remove hive">&times;</button><div class="ap-port">${portrait}</div><div class="ap-name">${h.name.replace(/</g,'&lt;')}</div><div class="ap-meta">${badge}<span class="ap-sub">${sub}</span></div></div>`;
+ }).join('');
+ host.innerHTML=`<header class="ap-top"><div><div class="eyebrow">Data-driven colony grading</div><h1>Hive<span class="hl">Grade</span></h1><div class="sub">Your apiary — tap a hive to inspect and grade it.</div></div><div class="toolbar"><button class="btn ghost" id="apExport">Export</button><button class="btn ghost" id="apImport">Import</button><button class="btn primary" id="apAdd">+ Add hive</button></div></header><div class="ap-grid">${cards}<button class="ap-add-card" id="apAddCard"><div class="ap-plus">+</div><div>Add a hive</div></button></div><div class="storenote" style="margin-top:16px">${Store.persists?'Saved on this device.':'Temporary session — saving unavailable in this context.'}</div>`;
+ host.querySelectorAll('.ap-card').forEach(c=>c.onclick=ev=>{if(ev.target.closest('.ap-del'))return;openHive(decodeURIComponent(c.dataset.open))});
+ host.querySelectorAll('.ap-del').forEach(b=>b.onclick=ev=>{ev.stopPropagation();const name=decodeURIComponent(b.dataset.del);askConfirm('Remove this hive?',`This deletes ${name} and all of its saved inspections. This can't be undone.`,'Remove',()=>removeHive(name))});
+ document.getElementById('apAdd').onclick=newHive;document.getElementById('apAddCard').onclick=newHive;
+ document.getElementById('apExport').onclick=exportAll;document.getElementById('apImport').onclick=()=>document.getElementById('importFile').click();
+}
+function showApiary(){document.getElementById('inspectView').style.display='none';document.getElementById('apiaryView').style.display='';renderApiary();window.scrollTo(0,0)}
+async function openHive(name){const pre=`hivegrade:insp:${name}:`;let latest=null;
+ for(const k of await Store.list(pre)){if(k.indexOf(pre)===0){const raw=await Store.get(k);if(raw){try{const s=JSON.parse(raw);if(!latest||s.date>latest.date)latest=s}catch(e){}}}}
+ if(latest){state=latest;if(!('cover' in state))state.cover=null;if(!('bottom' in state))state.bottom=null}
+ else{let h=null;const raw=await Store.get('hivegrade:hive:'+name);if(raw){try{h=JSON.parse(raw)}catch(e){}}
+  state=defaultState();state.hive=name;
+  if(h&&h.boxes&&h.boxes.length){state.boxes=h.boxes.map(mkBoxFrom);if(h.hemi)hemi=h.hemi;state.cover=h.cover||null;state.bottom=h.bottom||null}}
+ document.getElementById('apiaryView').style.display='none';document.getElementById('inspectView').style.display='';
+ bindHeader();render();loadHistory();window.scrollTo(0,0);
+}
+function newHive(){const name=(prompt('Name this hive','New hive')||'').trim();if(!name)return;
+ const boxes=defaultState().boxes.map(b=>({sys:b.sys,frames:b.frames.length,label:b.label,body:b.body,accent:b.accent}));
+ saveHive({name,hemi,boxes,cover:null,bottom:null}).then(()=>openHive(name));
+}
+async function removeHive(name){await Store.remove('hivegrade:hive:'+name);for(const k of await Store.list(`hivegrade:insp:${name}:`)){await Store.remove(k)}renderApiary()}
+
 /* ---------------- boot ---------------- */
 (async function(){const c=await Store.get('hivegrade:cats');if(c){try{catOverrides=JSON.parse(c)}catch(e){}}
  const h=await Store.get('hivegrade:hemi');if(h)hemi=h;
- state=defaultState();bindHeader();render();loadHistory()})();
+ state=defaultState();applyCatColors();
+ await renderApiary();
+ document.getElementById('apiaryView').style.display='';document.getElementById('inspectView').style.display='none';
+})();
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}</script>
 </body>
