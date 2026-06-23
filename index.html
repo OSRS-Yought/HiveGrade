@@ -379,12 +379,17 @@ const CATS=[{k:'cb',name:'Capped brood',v:'--c-cb'},{k:'ob',name:'Open brood / l
 const STACK=['ch','ne','po','ob','cb','em','fo'];
 
 /* ---------------- rubric (Randy/Farrar + Burns) ---------------- */
+/* Pollen floors buildup/swarm 10->6 and main flow 8->4 are Tier-2 local calibrations:
+   standing pollen is throughput (a few days' beebread), not a winter reserve, so a low
+   reading during a flow is flow-rate, not a deficit. Source: Oliver/ScientificBeekeeping,
+   Fat Bees Part 2. Dearth/fall/overwinter floors kept — there stored pollen is a real buffer.
+   Canonical: HiveGrade-Rubric-and-Bee-Logic.md (pollen-feed gating). */
 const RUBRIC=[
  {id:'overwinter',name:'Overwinter',months:[12,1],brood:[0,10,true],stores:[55],pollen:[10,20],floorLb:60,w:{brood:.05,stores:.6,pollen:.25,pattern:.1},miteCap:75,layExp:false},
  {id:'latewinter',name:'Late winter',months:[2],brood:[10],stores:[40],pollen:[10,20],floorLb:0,w:{brood:.25,stores:.4,pollen:.25,pattern:.1},miteCap:75,layExp:false},
- {id:'buildup',name:'Spring buildup',months:[3,4],brood:[40],stores:[15],pollen:[10,20],floorLb:0,w:{brood:.4,stores:.15,pollen:.25,pattern:.2},miteCap:72,layExp:true},
- {id:'swarm',name:'Swarm season',months:[5],brood:[50],stores:[20],pollen:[10,20],floorLb:0,w:{brood:.4,stores:.2,pollen:.2,pattern:.2},miteCap:72,layExp:true},
- {id:'flow',name:'Main flow',months:[6,7],brood:[35],stores:[30],pollen:[8,15],floorLb:0,w:{brood:.3,stores:.35,pollen:.15,pattern:.2},miteCap:72,layExp:true},
+ {id:'buildup',name:'Spring buildup',months:[3,4],brood:[40],stores:[15],pollen:[6,20],floorLb:0,w:{brood:.4,stores:.15,pollen:.25,pattern:.2},miteCap:72,layExp:true},
+ {id:'swarm',name:'Swarm season',months:[5],brood:[50],stores:[20],pollen:[6,20],floorLb:0,w:{brood:.4,stores:.2,pollen:.2,pattern:.2},miteCap:72,layExp:true},
+ {id:'flow',name:'Main flow',months:[6,7],brood:[35],stores:[30],pollen:[4,15],floorLb:0,w:{brood:.3,stores:.35,pollen:.15,pattern:.2},miteCap:72,layExp:true},
  {id:'dearth',name:'Winter-bee / dearth',months:[8,9],brood:[25],stores:[45],pollen:[8,15],floorLb:0,w:{brood:.2,stores:.35,pollen:.15,pattern:.3},miteCap:60,layExp:true},
  {id:'fallprep',name:'Fall prep',months:[10,11],brood:[5,20,true],stores:[55],pollen:[10,20],floorLb:60,w:{brood:.05,stores:.55,pollen:.25,pattern:.15},miteCap:72,layExp:false}
 ];
@@ -543,7 +548,13 @@ function recommend(){const m=compute(),s=stageFor(state.date,hemi),r=[];
  else if(m.brood>0&&m.solAvg>0&&m.solAvg<80) r.push({p:'soon',a:'Keep an eye on the queen',w:`brood pattern is ${Math.round(m.solAvg)}% solid. Recheck next visit, rule out disease, and requeen if it keeps slipping.`});
  if(s.floorLb>0&&m.honeyLb<s.floorLb) r.push({p:s.id==='overwinter'?'urgent':'soon',a:'Feed heavy 2:1 syrup',w:`~${Math.round(m.honeyLb)} lb stored, under the ~${s.floorLb} lb they need for winter.`});
  else if(storesShort){ if(cold) r.push({p:'soon',a:'Feed 2:1 syrup',w:`stores are light going into the cold — build them up while they'll still take it down.`}); else r.push({p:'soon',a:'Feed 1:1 syrup',w:`stores are light for the season; 1:1 keeps them fed and gets comb drawn.`}); }
- if(pollenShort&&m.brood>0) r.push({p:'soon',a:'Add a pollen sub / protein patty',w:`pollen's short for the brood they're carrying — protein keeps brood-rearing going.`});
+ // Protein-patty gate (Tier-1/2, Oliver/ScientificBeekeeping Fat Bees 2): feed protein in a
+ // dearth/pre-flow/fall window OR when the pattern is actually slipping — NEVER mid-flow on a
+ // strong, crowded colony (that's swarm fuel). Standing pollen alone is the wrong trigger.
+ const swarmPressure=state.cellS==='charged'||state.cellS==='capped'||(m.broodPct>55&&(m.t.em/(m.drawn||1))<0.1);
+ const proteinNeed=(m.brood>0&&m.solAvg>0&&m.solAvg<70)||s.id==='dearth'||s.id==='fallprep'||s.id==='buildup';
+ if(pollenShort&&proteinNeed&&!swarmPressure){const why=(s.id==='dearth'||s.id==='fallprep')?`pollen's short while they're rearing winter bees — a protein patty keeps brood-rearing up. (It stays quiet during a flow; protein on a strong colony then is swarm fuel.)`:s.id==='buildup'?`pollen's short during the pre-flow build — a protein patty supports the spring brood push.`:`brood pattern's slipping with pollen short — a protein patty can steady brood-rearing. Not needed during an active flow.`;
+  r.push({p:'soon',a:'Add a pollen sub / protein patty',w:why});}
  if((s.id==='swarm'||s.id==='buildup')&&m.broodPct>55&&(m.t.em/(m.drawn||1))<0.1) r.push({p:'soon',a:'Give them room or split',w:`packed brood nest in swarm season — add space or split before they decide for you.`});
  if(s.id==='flow'&&!storesShort){ if(m.honeyLb>=25) r.push({p:'routine',a:'Keep the super on; pull frames as they cap',w:`flow's on and ~${Math.round(m.honeyLb)} lb is capped — harvest fully capped frames and keep giving them room.`}); else r.push({p:'routine',a:'Keep the super on, give them room',w:`flow's on but only ~${Math.round(m.honeyLb)} lb is capped so far — let them fill and cap before any harvest.`}); }
  if(!r.some(x=>x.p!=='routine')){const next={overwinter:`Leave them alone. Heft for weight, keep top ventilation open, don't crack the lid in the cold.`,latewinter:`Watch stores hard — this is the starvation window. First pollen's coming.`,buildup:`Looking good. Watch for swarm cells as they fill out and stay ahead of space.`,swarm:`On track. Inspect weekly for swarm cells and keep ahead of congestion.`,flow:`On track. Keep supers on and harvest when frames are capped.`,dearth:`Wrap up mite treatment and feeding — you're raising winter bees now.`,fallprep:`Push stores toward ~60 lb and get one last mite check in before it turns cold.`};
@@ -759,101 +770,149 @@ document.getElementById('btnNew').onclick=()=>{if(!confirm('Start a fresh inspec
 
 /* ---------------- apiary ---------------- */
 function shadeSafe(c,p){try{return shade(c,p)}catch(e){return c}}
-/* ---- hive portrait: data-driven part renderers ----
-   Every base surface is recolorable (box body/accent, cover.color, bottom.color).
-   Apimaye hardware (vent disk, lid vent-square, entrance doors) inherits the apimaye
-   box accent so one color drives all hardware (e.g. Jeff's green). Detail strokes
-   (grain, joints, grille, mesh, dots) are fixed overlays — they read on any base. */
-const TERRA='#c2703f', NAVY='#243766', STANDALONE=['topbar','layens','warre'];
+/* ---- hive portrait: data-driven hi-fi part renderers ----
+   Every base surface is a per-instance vertical gradient derived from the part's color
+   (box body/accent, cover.color, bottom.color), so any part recolors. Gradient ids use a
+   never-resetting counter (pgGID) so the many inline card SVGs on one page never collide.
+   Apimaye hardware (vent disc, entrance doors) inherits the apimaye box accent. Flow logo and
+   any brand marks are intentionally omitted. Detail strokes (grain, joints, grille, mesh, dots,
+   handhold scoops) are fixed overlays — they read on any base color. */
+const NAVY='#243766', STANDALONE=['topbar','layens','warre'];
 const isStandalone=boxes=>boxes.some(b=>STANDALONE.includes((SYSTEMS[b.sys]||{}).shape));
 function partDefaultColor(part,type,topSys){
- if(part==='cover')return ({tele:'#c19a5b',gable:'#bd8e54',apimaye:TERRA,poly:'#e3e5e8'})[type]||(topSys?shadeSafe(topSys.body,-22):'#b88a4e');
- return ({wood:'#b3894f',apimaye:TERRA,screened:'#a9824e'})[type]||'#9a7b4f';
+ if(part==='cover')return ({tele:'#c19a5b',gable:'#bd8e54',apimaye:'#c2b088',poly:'#e6e7e9'})[type]||(topSys?shadeSafe(topSys.body,-22):'#b88a4e');
+ return ({wood:'#b3894f',apimaye:'#c2b088',screened:'#a9824e'})[type]||'#9a7b4f';
 }
+let pgGID=0, pgDefs=[];
+function pgGrad(c,a,b){const id='pg'+(pgGID++);pgDefs.push(`<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shadeSafe(c,a)}"/><stop offset="1" stop-color="${shadeSafe(c,b)}"/></linearGradient>`);return `url(#${id})`}
 function pgGrain(x,y,w,h,n){let s='';for(let i=1;i<=n;i++){const yy=(y+h*(i/(n+1))).toFixed(1);
- s+=`<line x1="${x+3}" y1="${yy}" x2="${x+w-3}" y2="${yy}" stroke="#000" stroke-width="0.7" opacity="0.10"/>`;}return s}
-function pgJoints(x,y,w,h,dark){let s='';const n=3,bh=h/(n*2);
- for(let i=0;i<n;i++){const ya=(y+bh*2*i+bh*0.4).toFixed(1),yb=(y+bh*2*i+bh*1.4).toFixed(1);
-  s+=`<rect x="${x-0.5}" y="${ya}" width="3.2" height="${(bh*0.9).toFixed(1)}" fill="${dark}"/>`;
-  s+=`<rect x="${x+w-2.7}" y="${yb}" width="3.2" height="${(bh*0.9).toFixed(1)}" fill="${dark}"/>`;}return s}
-function pgHand(cx,cy,wd){wd=wd||22;return `<rect x="${cx-wd/2}" y="${cy-2.6}" width="${wd}" height="5.2" rx="2.6" fill="#000" opacity="0.20"/><rect x="${cx-wd/2}" y="${cy-2.6}" width="${wd}" height="1.8" rx="0.9" fill="#fff" opacity="0.10"/>`}
-function pgBox(s,b,x,y,w,h){
- const body=b.body||s.body, acc=b.accent||s.accent, dark=shadeSafe(body,-16);
- const rx=s.shape==='poly'?6:s.shape==='apimaye'?4:2;
- let p=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${body}" stroke="#000" stroke-opacity="0.33" stroke-width="0.8"/>`;
+ s+=`<line x1="${x+8}" y1="${yy}" x2="${x+w-8}" y2="${yy}" stroke="#000" stroke-opacity="0.07" stroke-width="1.1"/>`
+   +`<line x1="${x+8}" y1="${(+yy+1).toFixed(1)}" x2="${x+w-8}" y2="${(+yy+1).toFixed(1)}" stroke="#fff" stroke-opacity="0.06" stroke-width="0.8"/>`;}return s}
+function pgJoints(x,y,w,h,c){let s='';const n=Math.max(4,Math.round(h/22)),bh=h/n,bw=6;
+ for(let i=0;i<n;i++){const yy=y+i*bh, dl=i%2?shadeSafe(c,-20):shadeSafe(c,4), dr=i%2?shadeSafe(c,4):shadeSafe(c,-20);
+  s+=`<rect x="${x-1}" y="${yy.toFixed(1)}" width="${bw}" height="${bh.toFixed(1)}" fill="${dl}" stroke="#0002" stroke-width="0.4"/>`
+    +`<rect x="${x+w-bw+1}" y="${yy.toFixed(1)}" width="${bw}" height="${bh.toFixed(1)}" fill="${dr}" stroke="#0002" stroke-width="0.4"/>`;}return s}
+function pgHand(cx,cy,w){const h=12;return `<rect x="${cx-w/2}" y="${cy-h/2}" width="${w}" height="${h}" rx="${h/2}" fill="#000" opacity="0.17"/>`
+ +`<rect x="${cx-w/2+2}" y="${cy-h/2+2}" width="${w-4}" height="${h-4}" rx="${(h-4)/2}" fill="#000" opacity="0.12"/>`
+ +`<rect x="${cx-w/2+4}" y="${cy+h/2-3}" width="${w-8}" height="2" rx="1" fill="#fff" opacity="0.18"/>`}
+function pgHalf(cx,cy,r){return `<path d="M${cx-r} ${cy} A ${r} ${r} 0 0 0 ${cx+r} ${cy} Z" fill="#000" opacity="0.16"/>`
+ +`<path d="M${cx-r+2} ${cy} A ${r-2} ${r-2} 0 0 0 ${cx+r-2} ${cy} Z" fill="#000" opacity="0.10"/>`
+ +`<path d="M${cx-r} ${cy} A ${r} ${r} 0 0 0 ${cx+r} ${cy}" fill="none" stroke="#fff" stroke-opacity="0.18" stroke-width="1.4"/>`}
+function pgBox(s,b,x,y,w,h){const body=b.body||s.body, accent=b.accent||s.accent||NAVY, cx=x+w/2;
+ let p=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${s.shape==='poly'?8:3}" fill="${pgGrad(body,7,-13)}" stroke="#0003" stroke-width="1"/>`;
  if(s.shape==='apimaye'){
-  for(let i=1;i<=4;i++){const yy=(y+h*(i/5)).toFixed(1);p+=`<line x1="${x+4}" y1="${yy}" x2="${x+w-4}" y2="${yy}" stroke="#000" stroke-opacity="0.12" stroke-width="1"/>`;}
-  p+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="none" stroke="#fff" stroke-opacity="0.13" stroke-width="0.8"/>`;
-  if(s.depth==='deep')p+=`<circle cx="${x+w/2}" cy="${(y+h/2).toFixed(1)}" r="3.6" fill="${acc}" stroke="#000" stroke-opacity="0.3" stroke-width="0.6"/>`;
- } else if(s.shape==='flow_super'){
-  for(let i=1;i<=5;i++){const xx=(x+w*(i/6)).toFixed(1);p+=`<line x1="${xx}" y1="${y+3}" x2="${xx}" y2="${y+h-3}" stroke="#000" stroke-opacity="0.22" stroke-width="1.3"/>`;}
- } else if(s.shape==='flow_box'){
-  p+=pgGrain(x,y,w,h,3)+pgJoints(x,y,w,h,dark);
-  p+=`<path d="M${(x+w*0.34).toFixed(1)} ${(y+h*0.40).toFixed(1)} L${x+w/2} ${(y+h*0.62).toFixed(1)} L${(x+w*0.66).toFixed(1)} ${(y+h*0.40).toFixed(1)}" fill="none" stroke="#000" stroke-opacity="0.30" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const nr=Math.round(h/11);for(let i=1;i<=nr;i++){const yy=y+h*(i/(nr+1));
+   p+=`<line x1="${x+10}" y1="${yy}" x2="${x+w-10}" y2="${yy}" stroke="#000" stroke-opacity="0.10" stroke-width="1.4"/>`
+     +`<line x1="${x+10}" y1="${yy+1.3}" x2="${x+w-10}" y2="${yy+1.3}" stroke="#fff" stroke-opacity="0.10" stroke-width="1"/>`;}
+  const hhy=s.depth==='deep'?y+h*0.26:y+h*0.5; p+=pgHand(cx,hhy,52);
+  if(s.depth==='deep'){const vcy=y+h*0.62,vr=15;
+   p+=`<circle cx="${cx}" cy="${vcy}" r="${vr+2.5}" fill="#000" opacity="0.10"/><circle cx="${cx}" cy="${vcy}" r="${vr}" fill="${accent}" stroke="#0004" stroke-width="1"/>`
+     +`<circle cx="${cx}" cy="${vcy}" r="${(vr*0.68).toFixed(1)}" fill="none" stroke="#000" stroke-opacity="0.22" stroke-width="1.3"/><circle cx="${cx}" cy="${vcy}" r="${(vr*0.36).toFixed(1)}" fill="none" stroke="#000" stroke-opacity="0.22" stroke-width="1.3"/>`;
+   for(let a=0;a<8;a++){const an=a*Math.PI/4,r1=vr*0.36,r2=vr*0.68;p+=`<line x1="${(cx+Math.cos(an)*r1).toFixed(1)}" y1="${(vcy+Math.sin(an)*r1).toFixed(1)}" x2="${(cx+Math.cos(an)*r2).toFixed(1)}" y2="${(vcy+Math.sin(an)*r2).toFixed(1)}" stroke="#000" stroke-opacity="0.15" stroke-width="1"/>`;}
+   p+=`<circle cx="${cx}" cy="${vcy}" r="1.6" fill="#000" opacity="0.3"/>`;}
  } else if(s.shape==='poly'){
-  p+=`<rect x="${(x+w/2-11)}" y="${(y+h/2-2.5).toFixed(1)}" width="22" height="5" rx="2.5" fill="#000" opacity="0.10"/><rect x="${(x+w/2-11)}" y="${(y+h/2-2.5).toFixed(1)}" width="22" height="1.8" rx="0.9" fill="#fff" opacity="0.18"/>`;
- } else { p+=pgGrain(x,y,w,h,3)+pgJoints(x,y,w,h,dark)+pgHand(x+w/2,y+h/2); }
+  p+=`<rect x="${x+1.5}" y="${y+1.5}" width="${w-3}" height="${h-3}" rx="7" fill="none" stroke="#fff" stroke-opacity="0.25" stroke-width="1"/>`+pgHalf(cx,y+h*0.42,15);
+ } else if(s.shape==='flow_super'){
+  p+=pgJoints(x,y,w,h,body);for(let i=1;i<=6;i++){const xx=(x+10+(w-20)*(i/7)).toFixed(1);p+=`<line x1="${xx}" y1="${y+8}" x2="${xx}" y2="${y+h-8}" stroke="#000" stroke-opacity="0.16" stroke-width="1.3"/>`;}
+  p+=pgHand(cx,y+h*0.5,46);
+ } else if(s.shape==='flow_box'){
+  p+=pgGrain(x,y,w,h,4)+pgJoints(x,y,w,h,body);
+  p+=`<path d="M${(cx-w*0.16).toFixed(1)} ${(y+h*0.4).toFixed(1)} L${cx} ${(y+h*0.6).toFixed(1)} L${(cx+w*0.16).toFixed(1)} ${(y+h*0.4).toFixed(1)}" fill="none" stroke="#000" stroke-opacity="0.28" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
+ } else if(s.shape==='generic'){
+  p+=pgGrain(x,y,w,h,3)+pgHand(cx,y+h*0.5,52);
+ } else { // lang / nuc (wood)
+  p+=pgGrain(x,y,w,h,4)+pgJoints(x,y,w,h,body)+pgHand(cx,y+h*0.5, s.shape==='nuc'?40:52);
+ }
  return p;
 }
-function pgCoverH(t){return t==='gable'?14:12}
-function pgCover(t,color,x,y,w,apiAcc){
- const oh=4,cx=x-oh,cw=w+oh*2,h=12;
- if(t==='gable')return `<path d="M${cx} ${y+13} L${x+w/2} ${y-2} L${cx+cw} ${y+13} Z" fill="${color}" stroke="#000" stroke-opacity="0.33" stroke-width="0.8"/><path d="M${x+w/2} ${y-2} L${cx} ${y+13}" stroke="#fff" stroke-opacity="0.12" stroke-width="0.8" fill="none"/>`;
- if(t==='apimaye'){let p=`<rect x="${cx}" y="${y}" width="${cw}" height="${h}" rx="3" fill="${color}" stroke="#000" stroke-opacity="0.3" stroke-width="0.8"/>`;
-  for(let i=0;i<3;i++){const yy=(y+3+i*2.2).toFixed(1);p+=`<line x1="${x+5}" y1="${yy}" x2="${x+w-5}" y2="${yy}" stroke="#000" stroke-opacity="0.28" stroke-width="1"/>`;}
-  return p+`<rect x="${x+w/2-3}" y="${y+h/2-1.2}" width="6" height="6" rx="1.2" fill="${apiAcc}" stroke="#000" stroke-opacity="0.3" stroke-width="0.5"/>`;}
- if(t==='poly')return `<rect x="${cx}" y="${y}" width="${cw}" height="${h}" rx="3" fill="${color}" stroke="#000" stroke-opacity="0.2" stroke-width="0.8"/><rect x="${x+w/2-9}" y="${y+h/2-2}" width="18" height="3.4" rx="1.7" fill="#000" opacity="0.10"/>`;
- return `<rect x="${cx}" y="${y}" width="${cw}" height="${h}" rx="1.5" fill="${color}" stroke="#000" stroke-opacity="0.33" stroke-width="0.8"/><line x1="${cx+2}" y1="${y+h-2}" x2="${cx+cw-2}" y2="${y+h-2}" stroke="#000" stroke-opacity="0.18" stroke-width="1"/>`+pgGrain(cx,y,cw,h,2);
+function pgCover(type,color,x,y,w,apiAcc){const oh=6,cw=w+oh*2,cxs=x-oh,cx=x+w/2;
+ if(type==='gable'){const rh=30,fascia=6;
+  let p=`<polygon points="${cxs} ${y+rh} ${cx} ${y} ${cx} ${y+rh}" fill="${pgGrad(color,8,-6)}" stroke="#0003" stroke-width="1"/>`
+   +`<polygon points="${cx} ${y} ${cxs+cw} ${y+rh} ${cx} ${y+rh}" fill="${pgGrad(color,-4,-16)}" stroke="#0003" stroke-width="1"/>`;
+  p+=`<rect x="${cxs}" y="${y+rh}" width="${cw}" height="${fascia}" rx="1.5" fill="${shadeSafe(color,-18)}" stroke="#0003" stroke-width="0.8"/>`;
+  p+=`<line x1="${cx}" y1="${y}" x2="${cx}" y2="${y+rh}" stroke="#000" stroke-opacity="0.18" stroke-width="1.4"/><circle cx="${cx}" cy="${y+2}" r="2.2" fill="${shadeSafe(color,-22)}"/>`;
+  return {svg:p,h:rh+fascia};}
+ if(type==='apimaye'){const h=30;
+  let p=`<path d="M${cxs} ${y+h-4} L${cxs+8} ${y+5} L${cxs+cw-8} ${y+5} L${cxs+cw} ${y+h-4} Z" fill="${pgGrad(color,7,-12)}" stroke="#0003" stroke-width="1"/>`;
+  p+=`<path d="M${cxs+8} ${y+5} L${cxs+cw-8} ${y+5} L${cxs+cw-12} ${y+10} L${cxs+12} ${y+10} Z" fill="#fff" opacity="0.12"/>`;
+  for(let i=0;i<5;i++){const yy=y+11+i*3, inset=12+i*2.4;p+=`<line x1="${x+24+inset}" y1="${yy}" x2="${x+w-24-inset}" y2="${yy}" stroke="#000" stroke-opacity="0.22" stroke-width="1.6"/>`;}
+  p+=`<rect x="${cxs-1}" y="${y+h-5}" width="${cw+2}" height="7" rx="2" fill="${shadeSafe(color,-16)}" stroke="#0003" stroke-width="0.8"/>`;
+  return {svg:p,h:h};}
+ if(type==='poly'){const h=18;
+  let p=`<rect x="${cxs}" y="${y}" width="${cw}" height="${h-5}" rx="3" fill="${pgGrad(color,6,-6)}" stroke="#0002" stroke-width="1"/>`;
+  p+=`<rect x="${cxs}" y="${y+h-7}" width="${cw}" height="8" rx="2.5" fill="${shadeSafe(color,-9)}" stroke="#0002" stroke-width="1"/>`;
+  p+=`<rect x="${cx-16}" y="${y+3}" width="32" height="4" rx="2" fill="#000" opacity="0.08"/>`;return {svg:p,h:h};}
+ const h=16; let p=`<rect x="${cxs}" y="${y}" width="${cw}" height="${h-5}" rx="2" fill="${pgGrad(color,7,-6)}" stroke="#0003" stroke-width="1"/>`;
+ p+=`<rect x="${cxs}" y="${y+h-7}" width="${cw}" height="8" rx="1.5" fill="${shadeSafe(color,-14)}" stroke="#0003" stroke-width="0.8"/>`+pgGrain(cxs,y,cw,h-5,2);
+ return {svg:p,h:h};
 }
-function pgFloorH(){return 11}
-function pgFloor(t,color,x,y,w,apiAcc){
- const oh=3,fx=x-oh,fw=w+oh*2,h=11;
- if(t==='apimaye'){let p=`<rect x="${fx}" y="${y}" width="${fw}" height="${h}" rx="2" fill="${color}" stroke="#000" stroke-opacity="0.3" stroke-width="0.8"/>`;
-  p+=`<rect x="${fx+5}" y="${y+h-5}" width="13" height="3.4" rx="1" fill="${apiAcc}"/><rect x="${fx+fw-18}" y="${y+h-5}" width="13" height="3.4" rx="1" fill="${apiAcc}"/>`;
-  for(let i=0;i<7;i++)p+=`<circle cx="${(fx+22+i*((fw-44)/6)).toFixed(1)}" cy="${y+h-3.3}" r="0.7" fill="#000" opacity="0.45"/>`;return p;}
- if(t==='screened'){let p=`<rect x="${fx}" y="${y}" width="${fw}" height="${h}" rx="1.5" fill="${color}" stroke="#000" stroke-opacity="0.33" stroke-width="0.8"/>`;
-  const mx=fx+6,mw=fw-12,my=y+2.5,mh=h-5;p+=`<rect x="${mx}" y="${my}" width="${mw}" height="${mh}" fill="${shadeSafe(color,-30)}"/>`;
-  for(let i=1;i<8;i++){const xx=(mx+mw*(i/8)).toFixed(1);p+=`<line x1="${xx}" y1="${my}" x2="${xx}" y2="${my+mh}" stroke="#000" stroke-opacity="0.42" stroke-width="0.6"/>`;}
-  for(let i=1;i<3;i++){const yy=(my+mh*(i/3)).toFixed(1);p+=`<line x1="${mx}" y1="${yy}" x2="${mx+mw}" y2="${yy}" stroke="#000" stroke-opacity="0.42" stroke-width="0.6"/>`;}return p;}
- return `<rect x="${fx}" y="${y}" width="${fw}" height="${h}" rx="1.5" fill="${color}" stroke="#000" stroke-opacity="0.33" stroke-width="0.8"/><rect x="${x+w/2-9}" y="${y+h-3}" width="18" height="3" rx="1" fill="#000" opacity="0.22"/>`+pgGrain(fx,y,fw,h,2);
+function pgFloor(type,color,x,y,w,apiAcc){const oh=5,fxs=x-oh,fw=w+oh*2,cx=x+w/2;
+ if(type==='apimaye'){const h=30;let p=`<rect x="${fxs}" y="${y}" width="${fw}" height="${h}" rx="4" fill="${pgGrad(color,7,-12)}" stroke="#0003" stroke-width="1"/>`;
+  p+=`<rect x="${fxs-2}" y="${y+h-7}" width="${fw+4}" height="7" rx="2" fill="${shadeSafe(color,-16)}" stroke="#0003" stroke-width="0.8"/>`;
+  [fxs+14,fxs+fw-46].forEach(dx=>{p+=`<rect x="${dx}" y="${y+8}" width="32" height="13" rx="2" fill="${apiAcc}" stroke="#0004" stroke-width="0.8"/><rect x="${dx+3}" y="${y+10}" width="26" height="4" rx="2" fill="#fff" opacity="0.08"/>`;});
+  for(let i=0;i<9;i++)p+=`<circle cx="${cx-12+i*3}" cy="${y+15}" r="1" fill="#000" opacity="0.4"/>`;
+  p+=`<rect x="${fxs+8}" y="${y+h-2}" width="12" height="7" rx="2" fill="${shadeSafe(color,-18)}"/><rect x="${fxs+fw-20}" y="${y+h-2}" width="12" height="7" rx="2" fill="${shadeSafe(color,-18)}"/>`;
+  return {svg:p,h:h};}
+ if(type==='screened'){const h=22;let p=`<rect x="${fxs}" y="${y}" width="${fw}" height="${h}" rx="3" fill="${pgGrad(color,6,-12)}" stroke="#0003" stroke-width="1"/>`;
+  const mx=fxs+10,mw=fw-20,my=y+4,mh=h-12;p+=`<rect x="${mx}" y="${my}" width="${mw}" height="${mh}" rx="1" fill="${shadeSafe(color,-34)}"/>`;
+  for(let i=1;i<10;i++){const xx=(mx+mw*(i/10)).toFixed(1);p+=`<line x1="${xx}" y1="${my}" x2="${xx}" y2="${my+mh}" stroke="#000" stroke-opacity="0.4" stroke-width="0.6"/>`;}
+  for(let i=1;i<3;i++){const yy=(my+mh*(i/3)).toFixed(1);p+=`<line x1="${mx}" y1="${yy}" x2="${mx+mw}" y2="${yy}" stroke="#000" stroke-opacity="0.4" stroke-width="0.6"/>`;}
+  p+=`<rect x="${fxs-2}" y="${y+h-7}" width="${fw+4}" height="7" rx="2" fill="${shadeSafe(color,-16)}" stroke="#0003" stroke-width="0.8"/>`;
+  p+=`<rect x="${fxs+6}" y="${y+h-2}" width="12" height="6" rx="2" fill="${shadeSafe(color,-18)}"/><rect x="${fxs+fw-18}" y="${y+h-2}" width="12" height="6" rx="2" fill="${shadeSafe(color,-18)}"/>`;
+  return {svg:p,h:h};}
+ const h=20;let p=`<rect x="${fxs}" y="${y}" width="${fw}" height="${h-7}" rx="2" fill="${pgGrad(color,7,-8)}" stroke="#0003" stroke-width="1"/>`;
+ p+=`<rect x="${fxs-2}" y="${y+h-9}" width="${fw+4}" height="6" rx="1.5" fill="${shadeSafe(color,-14)}" stroke="#0003" stroke-width="0.8"/>`;
+ p+=`<rect x="${cx-14}" y="${y+h-9}" width="28" height="3.4" rx="1" fill="#000" opacity="0.28"/>`;
+ p+=`<rect x="${fxs+8}" y="${y+h-3}" width="12" height="6" rx="2" fill="${shadeSafe(color,-16)}"/><rect x="${fxs+fw-20}" y="${y+h-3}" width="12" height="6" rx="2" fill="${shadeSafe(color,-16)}"/>`;
+ return {svg:p,h:h};
 }
-function pgStandalone(boxes,roofOverride){
- const W=120,cx=W/2,sb=boxes.find(b=>STANDALONE.includes((SYSTEMS[b.sys]||{}).shape));
- const s=SYSTEMS[sb.sys],body=sb.body||s.body,dark=shadeSafe(body,-22),light=shadeSafe(body,8);
- const roof=roofOverride||shadeSafe(body,-12);let p='',H;
- if(s.shape==='topbar'){const bt=40,bb=78;
-  p+=`<rect x="32" y="78" width="5" height="16" fill="${dark}"/><rect x="83" y="78" width="5" height="16" fill="${dark}"/>`;
-  p+=`<path d="M22 ${bb} L34 ${bt} L86 ${bt} L98 ${bb} Z" fill="${body}" stroke="#000" stroke-opacity="0.33" stroke-width="0.8"/>`+pgGrain(30,bt,60,bb-bt,4);
-  p+=`<path d="M22 ${bt} L${cx} 16 L98 ${bt} Z" fill="${roof}" stroke="#000" stroke-opacity="0.33" stroke-width="0.8"/>`;H=96;
- } else if(s.shape==='layens'){const bt=44,bb=74;
-  p+=`<rect x="26" y="74" width="5" height="18" fill="${dark}"/><rect x="89" y="74" width="5" height="18" fill="${dark}"/>`;
-  p+=`<path d="M20 ${bb} L30 ${bt} L90 ${bt} L100 ${bb} Z" fill="${body}" stroke="#000" stroke-opacity="0.33" stroke-width="0.8"/>`+pgGrain(28,bt,64,bb-bt,3)+pgHand(cx,(bt+bb)/2,24);
-  p+=`<path d="M20 ${bt} L${cx} 20 L100 ${bt} Z" fill="${roof}" stroke="#000" stroke-opacity="0.33" stroke-width="0.8"/>`;H=92;
- } else {const n=Math.max(2,Math.min(4,boxes.length||3)),boxH=18,wroof=roofOverride||'#e3e5e8';let y=24;
-  p+=`<path d="M26 ${y} L${cx} ${y-14} L94 ${y} Z" fill="${wroof}" stroke="#000" stroke-opacity="0.3" stroke-width="0.8"/><path d="M${cx} ${y-14} L26 ${y}" stroke="#fff" stroke-opacity="0.25" stroke-width="0.8" fill="none"/>`;
-  p+=`<rect x="30" y="${y-2}" width="60" height="4" rx="1" fill="${dark}"/>`;y+=4;
-  for(let i=0;i<n;i++){p+=`<rect x="32" y="${y}" width="56" height="${boxH}" fill="${i%2?light:body}" stroke="#000" stroke-opacity="0.33" stroke-width="0.8"/>`+pgGrain(32,y,56,boxH,2);y+=boxH;}
-  p+=`<rect x="28" y="${y}" width="64" height="4" rx="1" fill="${dark}"/>`;H=y+6;
- }
- return {content:p,w:W,h:H};
+function pgStandalone(boxes,roofOverride){const W=200,cx=W/2;
+ const sb=boxes.find(b=>STANDALONE.includes((SYSTEMS[b.sys]||{}).shape));
+ const s=SYSTEMS[sb.sys],body=sb.body||s.body,accent=sb.accent||s.accent;let p='',H;
+ if(s.shape==='topbar'||s.shape==='layens'){const long=s.shape==='layens';
+  const topW=long?160:128, botW=long?120:84, bh=long?64:88, by=58, bb=by+bh;
+  const tlx=cx-topW/2,trx=cx+topW/2,blx=cx-botW/2,brx=cx+botW/2;
+  p+=`<rect x="${cx-topW/2+18}" y="${bb-6}" width="7" height="26" rx="2" fill="${shadeSafe(body,-26)}"/><rect x="${cx+topW/2-25}" y="${bb-6}" width="7" height="26" rx="2" fill="${shadeSafe(body,-26)}"/>`;
+  p+=`<path d="M${blx} ${bb} L${tlx} ${by} L${trx} ${by} L${brx} ${bb} Z" fill="${pgGrad(body,8,-12)}" stroke="#0003" stroke-width="1"/>`+pgGrain(blx+8,by+8,botW-16,bh-16,long?3:4);
+  if(long)p+=pgHand(cx,by+bh*0.5,46);
+  const roof=roofOverride||shadeSafe(body,-10),rOh=14,ry=by,rTopY=by-30;
+  p+=`<polygon points="${tlx-rOh} ${ry} ${cx} ${rTopY} ${cx} ${ry}" fill="${pgGrad(roof,8,-4)}" stroke="#0003" stroke-width="1"/>`
+    +`<polygon points="${cx} ${rTopY} ${trx+rOh} ${ry} ${cx} ${ry}" fill="${pgGrad(roof,-4,-14)}" stroke="#0003" stroke-width="1"/>`;
+  p+=`<rect x="${tlx-rOh}" y="${ry}" width="${topW+rOh*2}" height="5" rx="1.5" fill="${shadeSafe(roof,-20)}" stroke="#0003" stroke-width="0.8"/>`;
+  p+=`<line x1="${cx}" y1="${rTopY}" x2="${cx}" y2="${ry}" stroke="#000" stroke-opacity="0.16" stroke-width="1.3"/>`;
+  if(!long)p+=`<rect x="${cx-7}" y="${rTopY-5}" width="14" height="7" rx="2" fill="${shadeSafe(roof,-18)}"/>`;
+  H=bb+22;
+ } else {const n=Math.max(2,Math.min(4,boxes.length||3)),bw=92,bx=cx-bw/2,boxH=34,roof=roofOverride||'#e6e7e9';let y=70;
+  p+=`<polygon points="${bx-10} ${y} ${cx-22} ${y-26} ${cx+22} ${y-26} ${bx+bw+10} ${y}" fill="${pgGrad(roof,5,-6)}" stroke="#0003" stroke-width="1"/>`;
+  p+=`<polygon points="${cx-22} ${y-26} ${cx} ${y-34} ${cx+22} ${y-26}" fill="${pgGrad(roof,8,-2)}" stroke="#0003" stroke-width="1"/>`;
+  p+=`<rect x="${bx-10}" y="${y}" width="${bw+20}" height="5" rx="1.5" fill="${shadeSafe(roof,-14)}" stroke="#0003" stroke-width="0.8"/>`;y+=5;
+  for(let i=0;i<n;i++){const bd=i===0?shadeSafe(body,18):body;p+=`<rect x="${bx}" y="${y}" width="${bw}" height="${boxH}" rx="2" fill="${pgGrad(bd,7,-10)}" stroke="#0003" stroke-width="1"/>`+pgGrain(bx,y,bw,boxH,2);y+=boxH;}
+  p+=`<rect x="${bx-6}" y="${y}" width="${bw+12}" height="9" rx="2" fill="${pgGrad(accent||'#4a4a4a',6,-14)}" stroke="#0003" stroke-width="0.8"/>`;
+  p+=`<rect x="${bx+8}" y="${y+9}" width="14" height="7" rx="2" fill="${shadeSafe(accent||'#4a4a4a',-10)}"/><rect x="${bx+bw-22}" y="${y+9}" width="14" height="7" rx="2" fill="${shadeSafe(accent||'#4a4a4a',-10)}"/>`;
+  H=y+18;}
+ return {svg:p,h:H};
 }
-function portraitInner(boxes,cover,bottom){
+function portraitInner(boxes,cover,bottom){pgDefs=[];
  if(!boxes||!boxes.length)boxes=[{sys:'generic'}];
- if(isStandalone(boxes))return pgStandalone(boxes,cover&&cover.color);
- const W=120,pad=11,bw=W-pad*2,dH={deep:34,med:24,shallow:18};
+ if(isStandalone(boxes)){const r=pgStandalone(boxes,cover&&cover.color);
+  const shadow=`<ellipse cx="100" cy="${r.h-2}" rx="74" ry="9" fill="#000" opacity="0.16"/>`;
+  return {content:`<defs>${pgDefs.join('')}</defs>${shadow}${r.svg}`,w:200,h:r.h+8};}
+ const W=200,bx=30,bw=140,lx=24,lw=152,sx=26,sw=148,dH={deep:96,med:66,shallow:48};
  const order=[...boxes].reverse();const topSys=SYSTEMS[order[0].sys]||SYSTEMS.generic;
- const anyApi=boxes.some(b=>((SYSTEMS[b.sys]||{}).shape)==='apimaye');
  const apiBox=boxes.find(b=>((SYSTEMS[b.sys]||{}).shape)==='apimaye');
  const apiAcc=(apiBox&&(apiBox.accent||SYSTEMS[apiBox.sys].accent))||NAVY;
+ const anyApi=!!apiBox;
  const cType=(cover&&cover.type)||(topSys.shape==='apimaye'?'apimaye':'tele');
  const cColor=(cover&&cover.color)||partDefaultColor('cover',cType,topSys);
- const bType=(bottom&&bottom.type)||(anyApi?'apimaye':'wood');
- const bColor=(bottom&&bottom.color)||partDefaultColor('floor',bType);
- let y=2,p='';
- p+=pgCover(cType,cColor,pad,y,bw,apiAcc);y+=pgCoverH(cType)+1;
- order.forEach(b=>{const s=SYSTEMS[b.sys]||SYSTEMS.generic;const h=dH[s.depth]||30;p+=pgBox(s,b,pad,y,bw,h);y+=h;});
- p+=pgFloor(bType,bColor,pad,y,bw,apiAcc);y+=pgFloorH();
- return {content:p,w:W,h:y+2};
+ const fType=(bottom&&bottom.type)||(anyApi?'apimaye':'wood');
+ const fColor=(bottom&&bottom.color)||partDefaultColor('floor',fType);
+ let inner='',y=14;
+ const C=pgCover(cType,cColor,lx,y,lw,apiAcc);inner+=C.svg;y+=C.h+1;
+ if(topSys.shape==='apimaye')inner+=`<rect x="${W/2-12}" y="${y-1}" width="24" height="10" rx="3" fill="${shadeSafe(cColor,-16)}"/>`;
+ order.forEach(b=>{const s=SYSTEMS[b.sys]||SYSTEMS.generic;const h=dH[s.depth]||66;inner+=pgBox(s,b,bx,y,bw,h);y+=h;});
+ const F=pgFloor(fType,fColor,sx,y,sw,apiAcc);inner+=F.svg;y+=F.h;
+ const shadow=`<ellipse cx="100" cy="${y+4}" rx="74" ry="9" fill="#000" opacity="0.16"/>`;
+ return {content:`<defs>${pgDefs.join('')}</defs>${shadow}${inner}`,w:200,h:y+10};
 }
 function portraitSVG(boxes,cover,bottom){const r=portraitInner(boxes,cover,bottom);
  return `<svg viewBox="0 0 ${r.w} ${r.h}" width="100%" xmlns="http://www.w3.org/2000/svg">${r.content}</svg>`;
