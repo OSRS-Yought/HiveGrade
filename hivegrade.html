@@ -122,6 +122,9 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
 .cfrow select{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:6px 7px;font-size:12.5px}
 .cfrow input[type=color]{width:34px;height:30px;padding:2px;background:var(--bg);border:1px solid var(--line);border-radius:6px}
 .cfgPreview{max-width:150px;margin:2px auto 0;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:10px}
+.cfgname{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:9px 11px;font-size:14px}
+.cfgname:focus{outline:none;border-color:var(--amber)}
+.cfgnameerr{color:var(--brick);font-size:12px;margin-top:6px;line-height:1.4}
 .cfgPreview svg{display:block}
 .bbrow input[type=color]{width:34px;height:30px;padding:2px}
 .bbrow input.fr{width:54px} .bbrow .del{background:transparent;border:none;color:var(--ink-faint);font-size:16px} .bbrow .del:hover{color:var(--brick)}
@@ -286,7 +289,12 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
 <!-- hive builder / colors -->
 <div class="overlay" id="cfgOverlay">
   <div class="modal wide">
-    <div class="mhead"><div><h3>Hive &amp; colors</h3><div class="esub">Build the stack, pick the system per box, set colors. Changing a box keeps frame data where it can.</div></div><button class="x" id="cfgClose">&times;</button></div>
+    <div class="mhead"><div><h3 id="cfgHeadTitle">Hive &amp; colors</h3><div class="esub" id="cfgHeadSub">Build the stack, pick the system per box, set colors. Changing a box keeps frame data where it can.</div></div><button class="x" id="cfgClose">&times;</button></div>
+    <div id="cfgCreateHead" style="display:none">
+      <div class="seclabel">Hive name</div>
+      <input type="text" id="cfgName" class="cfgname" placeholder="e.g. Carniolan #1" maxlength="60" autocomplete="off" spellcheck="false">
+      <div id="cfgNameErr" class="cfgnameerr" style="display:none"></div>
+    </div>
     <div class="seclabel">Boxes (bottom → top)</div>
     <div id="bbRows"></div>
     <button class="btn ghost" id="bbAdd" style="margin-top:4px">+ Add box</button>
@@ -628,7 +636,31 @@ function bindHeader(){const g=id=>document.getElementById(id);
 function cfgSummary(){document.getElementById('cfgSummary').textContent=state.boxes.map(b=>SYSTEMS[b.sys].name.replace('Langstroth ','L.').replace('Apimaye ','A.')+'·'+b.frames.length).join(' / ')}
 
 /* ---------------- hive builder ---------------- */
-function openCfg(){renderBB();renderCatColors();renderRegion();document.getElementById('cfgOverlay').classList.add('show')}
+let cfgMode='edit',cfgProfileSnapshot=null,cfgProfileKeySnap=null;
+function cfgApplyMode(){const isC=cfgMode==='create';
+ const ch=document.getElementById('cfgCreateHead');if(ch)ch.style.display=isC?'':'none';
+ const t=document.getElementById('cfgHeadTitle');if(t)t.textContent=isC?'New hive':'Hive & colors';
+ const s=document.getElementById('cfgHeadSub');if(s)s.textContent=isC?'Name it, build the stack, and pick your region — grading is region-specific.':'Build the stack, pick the system per box, set colors. Changing a box keeps frame data where it can.';
+ const d=document.getElementById('cfgDone');if(d)d.textContent=isC?'Create hive':'Done';
+ const e=document.getElementById('cfgNameErr');if(e){e.style.display='none';e.textContent=''}
+ if(isC){const n=document.getElementById('cfgName');if(n)n.value=state.hive||''}}
+function cfgRenderShow(){renderBB();renderCatColors();renderRegion();cfgApplyMode();document.getElementById('cfgOverlay').classList.add('show')}
+function openCfg(){cfgMode='edit';cfgRenderShow()}
+async function openCfgCreate(){cfgMode='create';cfgProfileSnapshot=profileId;cfgProfileKeySnap=await Store.get('hivegrade:profile');
+ state=defaultState();state.hive='';cfgRenderShow();const n=document.getElementById('cfgName');if(n){n.value='';setTimeout(()=>n.focus(),30)}}
+function cfgCancel(){document.getElementById('cfgOverlay').classList.remove('show');
+ if(cfgMode==='create'){profileId=cfgProfileSnapshot;
+  if(cfgProfileKeySnap!=null)Store.set('hivegrade:profile',cfgProfileKeySnap);else Store.remove('hivegrade:profile');
+  cfgMode='edit';showApiary()}
+ else cfgSummary()}
+async function cfgCreateDone(){const inp=document.getElementById('cfgName');const name=(inp?inp.value:'').trim();
+ const err=document.getElementById('cfgNameErr');const fail=m=>{if(err){err.textContent=m;err.style.display=''}if(inp)inp.focus()};
+ if(!name)return fail('Enter a name for this hive.');
+ const existing=await Store.get('hivegrade:hive:'+name);
+ if(existing)return fail('A hive named \u201c'+name+'\u201d already exists. Pick another name.');
+ const boxes=state.boxes.map(b=>({sys:b.sys,frames:b.frames.length,label:b.label,body:b.body,accent:b.accent}));
+ await saveHive({name,profile:profileId,boxes,cover:state.cover||null,bottom:state.bottom||null});
+ document.getElementById('cfgOverlay').classList.remove('show');cfgMode='edit';openHive(name)}
 function renderBB(){const host=document.getElementById('bbRows');host.innerHTML='';
  state.boxes.forEach((b,i)=>{const row=document.createElement('div');row.className='bbrow';
   const opts=Object.entries(SYSTEMS).map(([k,s])=>`<option value="${k}" ${k===b.sys?'selected':''}>${s.name}</option>`).join('');
@@ -697,10 +729,11 @@ function gradeGated(){const gl=document.getElementById('gLetter');if(gl){gl.text
  const gm=document.getElementById('gMods');if(gm)gm.innerHTML='';renderRecs()}
 {const zc=document.getElementById('zoneClose');if(zc)zc.onclick=()=>document.getElementById('zoneOverlay').classList.remove('show');const zo=document.getElementById('zoneOverlay');if(zo)zo.onclick=e=>{if(e.target===zo)zo.classList.remove('show')}}
 document.getElementById('cfgReset').onclick=()=>{catOverrides={};Store.set('hivegrade:cats','{}');['--c-cb','--c-ob','--c-ch','--c-ne','--c-po','--c-em','--c-fo'].forEach(v=>document.documentElement.style.removeProperty(v));renderCatColors();render()};
-document.getElementById('cfgClose').onclick=()=>{document.getElementById('cfgOverlay').classList.remove('show');cfgSummary()};
-document.getElementById('cfgDone').onclick=()=>{document.getElementById('cfgOverlay').classList.remove('show');cfgSummary()};
-document.getElementById('cfgOverlay').onclick=e=>{if(e.target.id==='cfgOverlay'){document.getElementById('cfgOverlay').classList.remove('show');cfgSummary()}};
+document.getElementById('cfgClose').onclick=cfgCancel;
+document.getElementById('cfgDone').onclick=()=>{if(cfgMode==='create'){cfgCreateDone()}else{document.getElementById('cfgOverlay').classList.remove('show');cfgSummary()}};
+document.getElementById('cfgOverlay').onclick=e=>{if(e.target.id==='cfgOverlay')cfgCancel()};
 document.getElementById('btnHive').onclick=openCfg;document.getElementById('btnHive2').onclick=openCfg;
+{const cn=document.getElementById('cfgName');if(cn){cn.oninput=()=>{state.hive=cn.value;const e=document.getElementById('cfgNameErr');if(e)e.style.display='none'};cn.onkeydown=ev=>{if(ev.key==='Enter'){ev.preventDefault();cfgCreateDone()}}}}
 
 /* ---------------- save / history ---------------- */
 function gradeOf(s,pid){const sv=state,sp=profileId;state=s;if(pid!==undefined)profileId=pid;const g=grade();state=sv;profileId=sp;return g}
@@ -1003,10 +1036,7 @@ async function openHive(name){const pre=`hivegrade:insp:${name}:`;let latest=nul
  document.getElementById('apiaryView').style.display='none';document.getElementById('inspectView').style.display='';
  bindHeader();render();loadHistory();window.scrollTo(0,0);
 }
-function newHive(){const name=(prompt('Name this hive','New hive')||'').trim();if(!name)return;
- const boxes=defaultState().boxes.map(b=>({sys:b.sys,frames:b.frames.length,label:b.label,body:b.body,accent:b.accent}));
- saveHive({name,profile:profileId,boxes,cover:null,bottom:null}).then(()=>openHive(name));
-}
+function newHive(){openCfgCreate()}
 async function removeHive(name){await Store.remove('hivegrade:hive:'+name);for(const k of await Store.list(`hivegrade:insp:${name}:`)){await Store.remove(k)}renderApiary()}
 
 /* ---------------- boot ---------------- */
