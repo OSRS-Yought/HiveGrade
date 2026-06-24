@@ -556,7 +556,7 @@ function recommend(){const m=compute(),s=stageFor(state.date,hemi),r=[];
   r.push({p:'soon',a:'Add a pollen sub / protein patty',w:why});}
  if((s.id==='swarm'||s.id==='buildup')&&m.broodPct>55&&(m.t.em/(m.drawn||1))<0.1) r.push({p:'soon',a:'Give them room or split',w:`packed brood nest in swarm season — add space or split before they decide for you.`});
  if(s.id==='flow'&&!storesShort){ if(m.honeyLb>=25) r.push({p:'routine',a:'Keep the super on; pull frames as they cap',w:`flow's on and ~${Math.round(m.honeyLb)} lb is capped — harvest fully capped frames and keep giving them room.`}); else r.push({p:'routine',a:'Keep the super on, give them room',w:`flow's on but only ~${Math.round(m.honeyLb)} lb is capped so far — let them fill and cap before any harvest.`}); }
- if(!r.some(x=>x.p!=='routine')){const next={overwinter:`Leave them alone. Heft for weight, keep top ventilation open, don't crack the lid in the cold.`,latewinter:`Watch stores hard — this is the starvation window. First pollen's coming.`,buildup:`Looking good. Watch for swarm cells as they fill out and stay ahead of space.`,swarm:`On track. Inspect weekly for swarm cells and keep ahead of congestion.`,flow:`On track. Keep supers on and harvest when frames are capped.`,dearth:`Wrap up mite treatment and feeding — you're raising winter bees now.`,fallprep:`Push stores toward ~60 lb and get one last mite check in before it turns cold.`};
+ if(r.length===0){const next={overwinter:`Leave them alone. Heft for weight, keep top ventilation open, don't crack the lid in the cold.`,latewinter:`Watch stores hard — this is the starvation window. First pollen's coming.`,buildup:`Looking good. Watch for swarm cells as they fill out and stay ahead of space.`,swarm:`On track. Inspect weekly for swarm cells and keep ahead of congestion.`,flow:`On track. Keep supers on and harvest when frames are capped.`,dearth:`Wrap up mite treatment and feeding — you're raising winter bees now.`,fallprep:`Push stores toward ~60 lb and get one last mite check in before it turns cold.`};
    r.push({p:'routine',a:`On track for ${s.name.toLowerCase()}`,w:next[s.id]||`Keep monitoring.`});}
  const SRCMAP=[['Treat for mites','mites_treat'],['Re-test mites','mites_monitor'],['Swarm is imminent','swarm'],['Swarm prep','swarm'],['Give them room','swarm'],['Feed','feed'],['Add a pollen','pollen']];
  r.forEach(x=>{const h=SRCMAP.find(p=>x.a.startsWith(p[0]));if(h)x.src=h[1]});
@@ -708,6 +708,13 @@ function openReport(){const g=grade(),m=g.m;const f=x=>x.toFixed(1);const denom=
  const recs=recommend();const recsHtml=recs.map(x=>{const c=x.p==='urgent'?'#8c1d1d':x.p==='soon'?'#9a6a1c':'#3a6a2e';const lk=x.src&&SRC[x.src]?` <a href="${SRC[x.src].u}" style="color:#9a6a1c">learn more →</a>`:'';return `<li><b style="color:${c}">${x.a}</b>${x.w?' — '+x.w:''}${lk}</li>`}).join('');
  const facRows=['brood','stores','pollen','pattern'].map(k=>`${k[0].toUpperCase()+k.slice(1)} ${Math.round(g.f[k])}/100 (w ${g.s.w[k]})`).join(' · ');
  const modRows=g.mods.length?g.mods.map(x=>x.txt).join(' · '):'None';
+ // FrameMap legend (report): only categories present, with a non-color code (the data key) so it
+ // survives grayscale print, plus the hatch = unlogged. The per-box % line above is the B&W-safe aggregate.
+ const lgChip=(bg,code,name)=>`<span style="display:inline-flex;align-items:center;gap:4px;margin:0 11px 5px 0;font-size:9.5px;color:#5a4a36;white-space:nowrap"><span style="width:11px;height:11px;border-radius:2px;background:${bg};border:1px solid #00000026;flex:none"></span><b style="font-family:var(--mono);font-size:9px">${code}</b> ${name}</span>`;
+ let hasUn=false;state.boxes.forEach(b=>b.frames.forEach(fr=>{if(CATS.reduce((a,c)=>a+(fr.cats[c.k]||0),0)<100)hasUn=true}));
+ const lgItems=CATS.filter(c=>m.t[c.k]>0).map(c=>lgChip(cssVar(c.v),c.k.toUpperCase(),c.name)).join('')
+   +(hasUn?lgChip('repeating-linear-gradient(45deg,#efe7d6,#efe7d6 3px,#e4dac4 3px,#e4dac4 6px)','—','Unlogged / not assessed'):'');
+ const fmapLegend=lgItems?`<div style="display:flex;flex-wrap:wrap;margin-top:7px;padding-top:7px;border-top:1px solid #e4dac4">${lgItems}</div>`:'';
  document.getElementById('rptBody').innerHTML=`
   <h1>${state.hive}</h1>
   <div class="rsub">${state.date} · ${daysAgo(state.date)} · ${g.s.name} · ${state.boxes.map(b=>SYSTEMS[b.sys].name).join(' / ')}</div>
@@ -725,7 +732,7 @@ function openReport(){const g=grade(),m=g.m;const f=x=>x.toFixed(1);const denom=
     <div class="rpt-mc"><div class="k">Frames pollen</div><div class="v">${f(m.pollen)} DFE</div></div>
     <div class="rpt-mc"><div class="k">Brood solid</div><div class="v">${m.brood>0&&m.solAvg>0?Math.round(m.solAvg)+'%':'—'}</div></div>
     <div class="rpt-mc"><div class="k">Frames drawn</div><div class="v">${f(m.drawn)} DFE</div></div></div></div>
-  <div class="rpt-sec"><h3>FrameMap</h3>${fmap}</div>
+  <div class="rpt-sec"><h3>FrameMap</h3>${fmap}${fmapLegend}</div>
   <div class="rpt-sec"><h3>What to do next</h3><ul>${recsHtml||'<li>Log frames to get recommendations.</li>'}</ul></div>
   ${state.notes?`<div class="rpt-sec"><h3>Notes</h3><div style="font-size:13px;color:#3a2e1c">${state.notes}</div></div>`:''}
   <div class="rpt-foot">How this grade was built — factors: ${facRows}. Modifiers: ${modRows}.</div>`;
