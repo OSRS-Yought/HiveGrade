@@ -43,6 +43,8 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
 .field label{font-size:11.5px;color:var(--ink-dim);font-family:var(--mono);letter-spacing:.03em}
 .field input,.field select{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:7px 9px;font-size:13.5px}
 .toggles{display:flex;gap:8px;flex-wrap:wrap}
+.qmark{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--panel-2);border:1px solid var(--line);color:var(--ink-dim);font-size:11px;font-weight:700;cursor:pointer;flex:none}
+.qmark:hover{border-color:var(--amber-soft);color:var(--ink)}
 .toggle{flex:1;min-width:88px;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px;font-size:12.5px;color:var(--ink-dim);text-align:center;user-select:none}
 .toggle.on{background:rgba(240,180,41,.14);border-color:var(--amber);color:var(--amber)}
 /* hive map */
@@ -294,11 +296,21 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
     <div id="cfgPreview" class="cfgPreview"></div>
     <div class="seclabel">Comb colors</div>
     <div class="catgrid" id="catColors"></div>
-    <div class="seclabel">Hemisphere</div>
-    <div class="toggles" style="max-width:280px"><div class="toggle" data-hemi="N">Northern</div><div class="toggle" data-hemi="S">Southern</div></div>
+    <div class="seclabel">Region &amp; zone</div>
+    <div class="cfrow"><span class="cflbl">Region</span><select id="regionSel"></select><span></span></div>
+    <div class="cfrow"><span class="cflbl">Zone</span><select id="zoneSel"></select><span class="qmark" id="zoneHelp" title="Find your USDA zone">?</span></div>
+    <div class="faint" style="font-size:11.5px;margin:-2px 2px 2px">Grading is region-specific. More regions added as each is verified.</div>
     <div class="ebtns"><button class="btn ghost" id="cfgReset">Reset colors</button><button class="btn primary" id="cfgDone">Done</button></div>
   </div>
 </div>
+
+<!-- zone help -->
+<div class="overlay" id="zoneOverlay"><div class="modal" style="width:min(360px,100%)">
+  <h3 style="margin:0 0 8px">Find your USDA hardiness zone</h3>
+  <p style="font-size:13px;color:var(--ink-dim);line-height:1.55;margin:0 0 12px">Your zone is set by average winter lows — it drives the overwintering numbers. Look it up by ZIP, then pick it here.</p>
+  <a href="https://planthardiness.ars.usda.gov" target="_blank" rel="noopener" class="btn primary" style="display:inline-block;text-decoration:none">USDA Zone Finder →</a>
+  <div class="ebtns" style="margin-top:14px"><button class="btn ghost" id="zoneClose">Close</button></div>
+</div></div>
 
 <!-- report -->
 <div class="overlay" id="reportOverlay">
@@ -378,22 +390,41 @@ const CATS=[{k:'cb',name:'Capped brood',v:'--c-cb'},{k:'ob',name:'Open brood / l
 const STACK=['ch','ne','po','ob','cb','em','fo'];
 
 /* ---------------- rubric (Randy/Farrar + Burns) ---------------- */
-/* Pollen floors buildup/swarm 10->6 and main flow 8->4 are Tier-2 local calibrations:
-   standing pollen is throughput (a few days' beebread), not a winter reserve, so a low
-   reading during a flow is flow-rate, not a deficit. Source: Oliver/ScientificBeekeeping,
-   Fat Bees Part 2. Dearth/fall/overwinter floors kept — there stored pollen is a real buffer.
-   Canonical: HiveGrade-Rubric-and-Bee-Logic.md (pollen-feed gating). */
-const RUBRIC=[
- {id:'overwinter',name:'Overwinter',months:[12,1],brood:[0,10,true],stores:[55],pollen:[10,20],floorLb:60,w:{brood:.05,stores:.6,pollen:.25,pattern:.1},miteCap:75,layExp:false},
- {id:'latewinter',name:'Late winter',months:[2],brood:[10],stores:[40],pollen:[10,20],floorLb:0,w:{brood:.25,stores:.4,pollen:.25,pattern:.1},miteCap:75,layExp:false},
- {id:'buildup',name:'Spring buildup',months:[3,4],brood:[40],stores:[15],pollen:[6,20],floorLb:0,w:{brood:.4,stores:.15,pollen:.25,pattern:.2},miteCap:72,layExp:true},
- {id:'swarm',name:'Swarm season',months:[5],brood:[50],stores:[20],pollen:[6,20],floorLb:0,w:{brood:.4,stores:.2,pollen:.2,pattern:.2},miteCap:72,layExp:true},
- {id:'flow',name:'Main flow',months:[6,7],brood:[35],stores:[30],pollen:[4,15],floorLb:0,w:{brood:.3,stores:.35,pollen:.15,pattern:.2},miteCap:72,layExp:true},
- {id:'dearth',name:'Winter-bee / dearth',months:[8,9],brood:[25],stores:[45],pollen:[8,15],floorLb:0,w:{brood:.2,stores:.35,pollen:.15,pattern:.3},miteCap:60,layExp:true},
- {id:'fallprep',name:'Fall prep',months:[10,11],brood:[5,20,true],stores:[55],pollen:[10,20],floorLb:60,w:{brood:.05,stores:.55,pollen:.25,pattern:.15},miteCap:72,layExp:false}
+/* ----- stage engine (place-independent) + region profiles (place-dependent) -----
+   STAGES = universal colony biology per stage: brood target, factor weights, mite cap, whether
+   laying is expected. These do not change by location. PROFILES = the place-dependent overlay:
+   which calendar months map to each stage, and the floors (stores %, pollen %, winter honey lb)
+   that depend on climate/forage. A region is chosen on the apiary screen; with none chosen,
+   grading is disabled — the app must never present one region's numbers as universal. Profiles
+   are added in verified waves. Pollen floors buildup/swarm=6, flow=4 are Tier-2 calibrations
+   (standing pollen is throughput, not a reserve): Oliver/ScientificBeekeeping, Fat Bees 2.
+   Per-region calendar sourcing + canonical text: HiveGrade-Rubric-and-Bee-Logic.md. */
+const STAGES=[
+ {id:'overwinter',name:'Overwinter',brood:[0,10,true],w:{brood:.05,stores:.6,pollen:.25,pattern:.1},miteCap:75,layExp:false},
+ {id:'latewinter',name:'Late winter',brood:[10],w:{brood:.25,stores:.4,pollen:.25,pattern:.1},miteCap:75,layExp:false},
+ {id:'buildup',name:'Spring buildup',brood:[40],w:{brood:.4,stores:.15,pollen:.25,pattern:.2},miteCap:72,layExp:true},
+ {id:'swarm',name:'Swarm season',brood:[50],w:{brood:.4,stores:.2,pollen:.2,pattern:.2},miteCap:72,layExp:true},
+ {id:'flow',name:'Main flow',brood:[35],w:{brood:.3,stores:.35,pollen:.15,pattern:.2},miteCap:72,layExp:true},
+ {id:'dearth',name:'Winter-bee / dearth',brood:[25],w:{brood:.2,stores:.35,pollen:.15,pattern:.3},miteCap:60,layExp:true},
+ {id:'fallprep',name:'Fall prep',brood:[5,20,true],w:{brood:.05,stores:.55,pollen:.25,pattern:.15},miteCap:72,layExp:false}
 ];
-function stageFor(dateStr,hemi){let m=new Date(dateStr+'T00:00').getMonth()+1; if(hemi==='S')m=((m+5)%12)+1;
- return RUBRIC.find(s=>s.months.includes(m))||RUBRIC[4]}
+/* label = "Region · Zone". months: stageId -> [calendar months]. floors: stageId -> {stores:%,
+   pollen:[lo,hi], floorLb:winter honey lb}. src: region calendar basis (text, not a verified link;
+   per-number verified citations land with the in-app "why" feature). */
+const PROFILES={
+ nw_8b:{label:'Northwest · 8b',region:'Northwest',zone:'8b',hemi:'N',
+  src:'PNW calibration — WSU Extension / WSBA forage & overwintering (maritime zone 8b); stage targets after Oliver',
+  months:{overwinter:[12,1],latewinter:[2],buildup:[3,4],swarm:[5],flow:[6,7],dearth:[8,9],fallprep:[10,11]},
+  floors:{overwinter:{stores:55,pollen:[10,20],floorLb:60},latewinter:{stores:40,pollen:[10,20],floorLb:0},buildup:{stores:15,pollen:[6,20],floorLb:0},swarm:{stores:20,pollen:[6,20],floorLb:0},flow:{stores:30,pollen:[4,15],floorLb:0},dearth:{stores:45,pollen:[8,15],floorLb:0},fallprep:{stores:55,pollen:[10,20],floorLb:60}}}
+};
+function PROF(){return (profileId&&PROFILES[profileId])||null}
+function regionList(){const seen=new Set(),out=[];Object.values(PROFILES).forEach(p=>{if(!seen.has(p.region)){seen.add(p.region);out.push(p.region)}});return out}
+function zonesFor(region){return Object.entries(PROFILES).filter(([k,p])=>p.region===region).map(([k,p])=>({id:k,zone:p.zone}))}
+function profileFor(region,zone){const e=Object.entries(PROFILES).find(([k,p])=>p.region===region&&p.zone===zone);return e?e[0]:null}
+function stageFor(dateStr,prof){let m=new Date(dateStr+'T00:00').getMonth()+1; if(prof.hemi==='S')m=((m+5)%12)+1;
+ const id=Object.keys(prof.months).find(k=>prof.months[k].includes(m))||'flow';
+ const base=STAGES.find(x=>x.id===id)||STAGES[4],fl=prof.floors[id]||{stores:30,pollen:[6,15],floorLb:0};
+ return Object.assign({},base,{stores:[fl.stores],pollen:fl.pollen.slice(),floorLb:fl.floorLb})}
 
 /* letter + color from 0-100 */
 function letterColor(score){const t=[[97,'A+',1],[93,'A',1],[90,'A-',1],[87,'B+',2],[83,'B',2],[80,'B-',2],[77,'C+',3],[73,'C',3],[70,'C-',3],[67,'D+',4],[63,'D',4],[60,'D-',4],[0,'F',5]];
@@ -403,11 +434,11 @@ function letterColor(score){const t=[[97,'A+',1],[93,'A',1],[90,'A-',1],[87,'B+'
  return {letter:row[1],color:tier===5?base:shade(base,adj/3),tier}}
 
 /* ---------------- state ---------------- */
-let state=null,sel=null,hemi='N',catOverrides={};
+let state=null,sel=null,profileId=null,catOverrides={};
 function blankFrame(i){return{idx:i,cats:{cb:0,ob:0,ch:0,ne:0,po:0,em:0,fo:0},sol:0,type:'Drawn comb'}}
 function newBox(sysKey){const s=SYSTEMS[sysKey];return{sys:sysKey,label:s.name,frames:Array.from({length:s.frames},(_,i)=>blankFrame(i+1)),body:s.body,accent:s.accent}}
 function defaultState(){return{hive:'Carniolan #1',date:new Date().toISOString().slice(0,10),queenSeen:false,eggsSeen:false,mark:'',cellN:0,cellS:'none',mites:0,bees:300,notes:'',
- boxes:[mkBox('apimaye_deep','Lower deep'),mkBox('apimaye_deep','Upper deep'),mkBox('apimaye_med','Medium super')]}}
+ boxes:[mkBox('lang_deep','Deep')]}}
 function mkBox(sysKey,label){const b=newBox(sysKey);b.label=label;return b}
 
 /* ---------------- compute metrics ---------------- */
@@ -431,7 +462,7 @@ function arrangement(){let contiguous=true,pollenAdj=false,anyBrood=false;
  return {contiguous,pollenAdj,anyBrood}}
 
 /* ---------------- grade ---------------- */
-function grade(){const m=compute(),s=stageFor(state.date,hemi);
+function grade(){const p=PROF();if(!p)return null;const m=compute(),s=stageFor(state.date,p);
  const facScore=(actual,band)=>{const lo=band[0];if(band[2])return 100; // lowOk → neutral full
    if(actual>=lo)return 100;return Math.max(0,actual/lo*100)};
  const f={
@@ -488,7 +519,7 @@ function renderMap(){const host=document.getElementById('hive');host.innerHTML='
 function renderLegend(){const l=document.getElementById('legend');l.innerHTML='';
  CATS.forEach(c=>{const d=document.createElement('div');d.className='lg';d.innerHTML=`<span class="sw" style="background:${cssVar(c.v)}"></span>${c.name}`;l.appendChild(d)})}
 
-function renderGrade(){const g=grade();
+function renderGrade(){const g=grade();if(!g)return gradeGated();
  document.getElementById('gLetter').textContent=g.lc.letter;
  document.getElementById('gLetter').style.color=g.lc.color;
  document.getElementById('gStage').textContent=g.s.name+' · '+state.date;
@@ -511,11 +542,11 @@ function renderDash(){const m=compute();const f=x=>x.toFixed(1);
  if(m.drawn===0)cb.innerHTML='<span style="width:100%;background:var(--c-fo)"></span>'}
 
 function flag(cls,title,body){return `<div class="flag ${cls}"><span class="dot"></span><div><b>${title}</b>${body?' — '+body:''}</div></div>`}
-function renderFlags(){const g=grade(),m=g.m,out=[];
+function renderFlags(){const m=compute(),p=PROF(),s=p?stageFor(state.date,p):null,out=[];
  if(state.cellS==='capped')out.push(flag('alert','Capped swarm cells','a prime swarm can leave any day'));
  else if(state.cellS==='charged')out.push(flag('alert','Charged queen cells','swarm clock is running'));
  else if(state.cellS==='cups'&&state.cellN>0)out.push(flag('watch','Dry cups only','normal — keep the weekly watch'));
- if(g.s.layExp&&!state.queenSeen&&!state.eggsSeen&&m.t.ob<0.05){
+ if(s&&s.layExp&&!state.queenSeen&&!state.eggsSeen&&m.t.ob<0.05){
    if(m.t.cb<0.5)out.push(flag('alert','No laying evidence','no queen, eggs, or open brood when expected'));
    else out.push(flag('watch','No fresh laying evidence','capped brood present but no eggs, larvae, or queen seen — confirm she is laying'));
  } else if(state.queenSeen||state.eggsSeen||m.t.ob>0)out.push(flag('ok','Queen is laying','confirmed '+[state.queenSeen&&'sighting',state.eggsSeen&&'eggs',m.t.ob>0&&'open brood'].filter(Boolean).join(' + ')));
@@ -524,7 +555,7 @@ function renderFlags(){const g=grade(),m=g.m,out=[];
  if(m.mitePct>=3)out.push(flag('alert','Mites over threshold',`${m.mitePct.toFixed(1)}% — treat`));
  else if(m.mitePct>=2)out.push(flag('watch','Mites climbing',`${m.mitePct.toFixed(1)}%`));
  else if(state.bees>0)out.push(flag('ok','Mites in range',`${m.mitePct.toFixed(2)}%`));
- if(g.s.floorLb>0&&m.honeyLb<g.s.floorLb)out.push(flag('watch','Below winter stores floor',`~${Math.round(m.honeyLb)} lb of ${g.s.floorLb}`));
+ if(s&&s.floorLb>0&&m.honeyLb<s.floorLb)out.push(flag('watch','Below winter stores floor',`~${Math.round(m.honeyLb)} lb of ${g.s.floorLb}`));
  if(m.brood>0&&m.pollenPct<5)out.push(flag('watch','Little pollen','brood needs bee bread'));
  document.getElementById('flags').innerHTML=out.join('')||'<div class="faint">Log some frames to see flags.</div>'}
 
@@ -536,7 +567,7 @@ const SRC={
  feed:{u:'https://scientificbeekeeping.com/fat-bees-part-2/',t:'Randy Oliver — colony nutrition'},
  pollen:{u:'https://scientificbeekeeping.com/fat-bees-part-2/',t:'Randy Oliver — protein & pollen'}
 };
-function recommend(){const m=compute(),s=stageFor(state.date,hemi),r=[];
+function recommend(){const p=PROF();if(!p)return [];const m=compute(),s=stageFor(state.date,p),r=[];
  const storesShort=m.storesPct<s.stores[0], pollenShort=m.pollenPct<s.pollen[0];
  const cold=(s.id==='fallprep'||s.id==='overwinter'||s.id==='dearth');
  if(m.mitePct>=3) r.push({p:'urgent',a:'Treat for mites',w:`wash is ${m.mitePct.toFixed(1)}%${s.id==='dearth'?`, and these are your winter bees — this is the window that decides survival`:``}. Use a treatment that fits your temps and whether supers are on.`});
@@ -597,7 +628,7 @@ function bindHeader(){const g=id=>document.getElementById(id);
 function cfgSummary(){document.getElementById('cfgSummary').textContent=state.boxes.map(b=>SYSTEMS[b.sys].name.replace('Langstroth ','L.').replace('Apimaye ','A.')+'·'+b.frames.length).join(' / ')}
 
 /* ---------------- hive builder ---------------- */
-function openCfg(){renderBB();renderCatColors();document.querySelectorAll('.toggle[data-hemi]').forEach(t=>t.classList.toggle('on',t.dataset.hemi===hemi));document.getElementById('cfgOverlay').classList.add('show')}
+function openCfg(){renderBB();renderCatColors();renderRegion();document.getElementById('cfgOverlay').classList.add('show')}
 function renderBB(){const host=document.getElementById('bbRows');host.innerHTML='';
  state.boxes.forEach((b,i)=>{const row=document.createElement('div');row.className='bbrow';
   const opts=Object.entries(SYSTEMS).map(([k,s])=>`<option value="${k}" ${k===b.sys?'selected':''}>${s.name}</option>`).join('');
@@ -649,7 +680,22 @@ function renderCatColors(){const host=document.getElementById('catColors');host.
  CATS.forEach(c=>{const cur=catOverrides[c.v]||cssVar(c.v);const d=document.createElement('div');d.className='catrow';
   d.innerHTML=`<input type="color" value="${cur}" data-cv="${c.v}"><span>${c.name}</span>`;host.appendChild(d)});
  host.querySelectorAll('input[data-cv]').forEach(inp=>inp.oninput=()=>{catOverrides[inp.dataset.cv]=inp.value;Store.set('hivegrade:cats',JSON.stringify(catOverrides));render();renderCatColors()})}
-document.querySelectorAll('.toggle[data-hemi]').forEach(t=>t.onclick=()=>{hemi=t.dataset.hemi;document.querySelectorAll('.toggle[data-hemi]').forEach(x=>x.classList.toggle('on',x===t));Store.set('hivegrade:hemi',hemi);renderGrade();renderFlags()});
+function fillZones(region){const zs=document.getElementById('zoneSel');if(!zs)return;const cur=PROF();const zns=region?zonesFor(region):[];
+ zs.innerHTML=(zns.length>1?'<option value="">— zone —</option>':'')+zns.map(z=>`<option value="${z.zone}" ${cur&&cur.zone===z.zone?'selected':''}>${z.zone}</option>`).join('');zs.disabled=!region||!zns.length}
+function renderRegion(){const rs=document.getElementById('regionSel');if(!rs)return;const cur=PROF(),regions=regionList();
+ rs.innerHTML='<option value="">— select —</option>'+regions.map(r=>`<option value="${r}" ${cur&&cur.region===r?'selected':''}>${r}</option>`).join('');
+ fillZones(cur?cur.region:'');
+ rs.onchange=()=>{fillZones(rs.value);const zs=document.getElementById('zoneSel');const zns=zonesFor(rs.value);if(zns.length===1)zs.value=zns[0].zone;profileId=(rs.value&&zs.value)?profileFor(rs.value,zs.value):null;applyProfile()};
+ const zs=document.getElementById('zoneSel');zs.onchange=()=>{profileId=zs.value?profileFor(rs.value,zs.value):null;applyProfile()};
+ const zh=document.getElementById('zoneHelp');if(zh)zh.onclick=()=>document.getElementById('zoneOverlay').classList.add('show')}
+function applyProfile(){if(profileId)Store.set('hivegrade:profile',profileId);renderGrade();renderFlags()}
+function gradeGated(){const gl=document.getElementById('gLetter');if(gl){gl.textContent='–';gl.style.color='var(--ink-dim)'}
+ const st=document.getElementById('gStage');if(st)st.textContent='No region set';
+ const sc=document.getElementById('gScore');if(sc)sc.textContent='Select a region to grade';
+ const mtr=document.getElementById('gMeter');if(mtr)mtr.style.width='0%';
+ const gr=document.getElementById('gReason');if(gr)gr.innerHTML='<div class="faint" style="font-size:12.5px;padding:6px 0;line-height:1.5">Grading is region-specific. Open <b>Hive &amp; colors</b> and choose your region &amp; zone to begin grading this hive.</div>';
+ const gm=document.getElementById('gMods');if(gm)gm.innerHTML='';renderRecs()}
+{const zc=document.getElementById('zoneClose');if(zc)zc.onclick=()=>document.getElementById('zoneOverlay').classList.remove('show');const zo=document.getElementById('zoneOverlay');if(zo)zo.onclick=e=>{if(e.target===zo)zo.classList.remove('show')}}
 document.getElementById('cfgReset').onclick=()=>{catOverrides={};Store.set('hivegrade:cats','{}');['--c-cb','--c-ob','--c-ch','--c-ne','--c-po','--c-em','--c-fo'].forEach(v=>document.documentElement.style.removeProperty(v));renderCatColors();render()};
 document.getElementById('cfgClose').onclick=()=>{document.getElementById('cfgOverlay').classList.remove('show');cfgSummary()};
 document.getElementById('cfgDone').onclick=()=>{document.getElementById('cfgOverlay').classList.remove('show');cfgSummary()};
@@ -657,9 +703,9 @@ document.getElementById('cfgOverlay').onclick=e=>{if(e.target.id==='cfgOverlay')
 document.getElementById('btnHive').onclick=openCfg;document.getElementById('btnHive2').onclick=openCfg;
 
 /* ---------------- save / history ---------------- */
-function gradeOf(s){const saved=state;state=s;const g=grade();state=saved;return g}
+function gradeOf(s,pid){const sv=state,sp=profileId;state=s;if(pid!==undefined)profileId=pid;const g=grade();state=sv;profileId=sp;return g}
 async function saveInspection(){await Store.set(`hivegrade:insp:${state.hive}:${state.date}`,JSON.stringify(state));
- await saveHive({name:state.hive,hemi,boxes:state.boxes.map(b=>({sys:b.sys,frames:b.frames.length,label:b.label,body:b.body,accent:b.accent})),cover:state.cover||null,bottom:state.bottom||null});
+ await saveHive({name:state.hive,profile:profileId,boxes:state.boxes.map(b=>({sys:b.sys,frames:b.frames.length,label:b.label,body:b.body,accent:b.accent})),cover:state.cover||null,bottom:state.bottom||null});
  await loadHistory();
  const b=document.getElementById('btnSave'),o=b.textContent;b.textContent='Saved ✓';setTimeout(()=>b.textContent=o,1300)}
 document.getElementById('btnSave').onclick=saveInspection;
@@ -675,7 +721,7 @@ async function loadHistory(){if(!state)return;const pre='hivegrade:insp:'+state.
  document.getElementById('sparkWrap').style.display=items.length>1?'block':'none'}
 
 /* ---------------- summarize (JSON) ---------------- */
-document.getElementById('btnJSON').onclick=()=>{const g=grade(),m=g.m;
+document.getElementById('btnJSON').onclick=()=>{const g=grade();if(!g)return;const m=g.m;
  const payload={app:'HiveGrade',hive:state.hive,date:state.date,season_stage:g.s.name,
   grade:g.lc.letter,score:Math.round(g.base),
   hive_layout:state.boxes.map(b=>({box:b.label,system:SYSTEMS[b.sys].name,frames:b.frames.length})),
@@ -692,7 +738,7 @@ document.getElementById('btnJSON').onclick=()=>{const g=grade(),m=g.m;
  download(`hivegrade-${state.hive}-${state.date}.json`,txt,'application/json')};
 
 /* ---------------- report ---------------- */
-function openReport(){const g=grade(),m=g.m;const f=x=>x.toFixed(1);const denom=m.drawn>0?m.drawn:1;
+function openReport(){const g=grade();if(!g){document.getElementById('rptBody').innerHTML='<h1>Choose a region first</h1><p style="font-size:13px;color:#6a5a3e">Open <b>Hive &amp; colors</b> and set your region &amp; zone — grading and the report are region-specific.</p>';document.getElementById('reportOverlay').classList.add('show');return}const m=g.m;const f=x=>x.toFixed(1);const denom=m.drawn>0?m.drawn:1;
  const compSpans=CATS.filter(c=>c.k!=='fo').map(c=>{const fr=m.t[c.k]/denom*100;return fr>0?`<span style="width:${fr}%;background:${cssVar(c.v)}"></span>`:''}).join('');
  const mc=m.mitePct,mStat=mc>=3?['#8c1d1d','over threshold']:mc>=2?['#9a6a1c','climbing']:state.bees>0?['#2e7d32','in range']:['#7a6a4e','no wash'];
  const laying=state.queenSeen||state.eggsSeen||m.t.ob>0;
@@ -761,14 +807,14 @@ async function deleteInspection(hive,date){await Store.remove(`hivegrade:insp:${
 async function exportAll(){const dump={app:'HiveGrade',kind:'backup',exported:new Date().toISOString(),data:{}};
  for(const pre of ['hivegrade:insp:','hivegrade:hive:']){const ks=await Store.list(pre);for(const k of ks){const v=await Store.get(k);if(v!=null)dump.data[k]=v}}
  const cats=await Store.get('hivegrade:cats');if(cats)dump.data['hivegrade:cats']=cats;
- const hm=await Store.get('hivegrade:hemi');if(hm)dump.data['hivegrade:hemi']=hm;
+ const pr=await Store.get('hivegrade:profile');if(pr)dump.data['hivegrade:profile']=pr;
  download(`hivegrade-backup-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(dump,null,2),'application/json')}
 document.getElementById('importFile').onchange=e=>{const file=e.target.files[0];if(!file)return;const rd=new FileReader();
  rd.onload=async()=>{let obj;try{obj=JSON.parse(rd.result)}catch(err){alert('Could not read that file — not valid JSON.');return}
   const data=obj&&obj.data?obj.data:obj;if(!data||typeof data!=='object'){alert('No HiveGrade data found in that file.');return}
   let n=0;for(const k of Object.keys(data)){if(k.startsWith('hivegrade:')){await Store.set(k,typeof data[k]==='string'?data[k]:JSON.stringify(data[k]));n++}}
   const c=await Store.get('hivegrade:cats');if(c){try{catOverrides=JSON.parse(c)}catch(_){}}
-  const h=await Store.get('hivegrade:hemi');if(h)hemi=h;
+  const pr=await Store.get('hivegrade:profile');if(pr)profileId=pr;
   await loadHistory();if(typeof renderApiary==='function')renderApiary();render();
   alert(`Imported ${n} record${n===1?'':'s'}. Merged by key — only matching records were replaced.`)};
  rd.readAsText(file);e.target.value=''};
@@ -926,13 +972,13 @@ function portraitSVG(boxes,cover,bottom){const r=portraitInner(boxes,cover,botto
 function mkBoxFrom(b){const nb=newBox(b.sys||'lang_deep');nb.label=b.label||SYSTEMS[nb.sys].name;nb.body=b.body||SYSTEMS[nb.sys].body;nb.accent=b.accent||SYSTEMS[nb.sys].accent;const n=Math.max(1,b.frames||SYSTEMS[nb.sys].frames);nb.frames=Array.from({length:n},(_,i)=>blankFrame(i+1));return nb}
 async function saveHive(h){await Store.set('hivegrade:hive:'+h.name,JSON.stringify(h))}
 async function gatherApiary(){const hives={};
- for(const k of await Store.list('hivegrade:hive:')){const raw=await Store.get(k);if(raw){try{const h=JSON.parse(raw);hives[h.name]={name:h.name,boxes:h.boxes,cover:h.cover,bottom:h.bottom,count:0,latestDate:null,latestGrade:null}}catch(e){}}}
+ for(const k of await Store.list('hivegrade:hive:')){const raw=await Store.get(k);if(raw){try{const h=JSON.parse(raw);hives[h.name]={name:h.name,boxes:h.boxes,cover:h.cover,bottom:h.bottom,profile:h.profile||null,count:0,latestDate:null,latestGrade:null}}catch(e){}}}
  const byHive={};
  for(const k of await Store.list('hivegrade:insp:')){const raw=await Store.get(k);if(raw){try{const s=JSON.parse(raw);(byHive[s.hive]=byHive[s.hive]||[]).push(s)}catch(e){}}}
  Object.keys(byHive).forEach(name=>{const list=byHive[name].sort((a,b)=>a.date.localeCompare(b.date)),last=list[list.length-1];
   const h=hives[name]||(hives[name]={name});h.count=list.length;
   if(!h.boxes){h.boxes=last.boxes;h.cover=last.cover;h.bottom=last.bottom}
-  const g=gradeOf(last);h.latestGrade=g.lc;h.latestDate=last.date;});
+  const g=gradeOf(last,h.profile);h.latestGrade=g?g.lc:null;h.latestDate=last.date;});
  return Object.values(hives).sort((a,b)=>(b.latestDate||'').localeCompare(a.latestDate||'')||a.name.localeCompare(b.name));
 }
 async function renderApiary(){const host=document.getElementById('apiaryView');if(!host)return;const hives=await gatherApiary();
@@ -953,19 +999,19 @@ async function openHive(name){const pre=`hivegrade:insp:${name}:`;let latest=nul
  if(latest){state=latest;if(!('cover' in state))state.cover=null;if(!('bottom' in state))state.bottom=null}
  else{let h=null;const raw=await Store.get('hivegrade:hive:'+name);if(raw){try{h=JSON.parse(raw)}catch(e){}}
   state=defaultState();state.hive=name;
-  if(h&&h.boxes&&h.boxes.length){state.boxes=h.boxes.map(mkBoxFrom);if(h.hemi)hemi=h.hemi;state.cover=h.cover||null;state.bottom=h.bottom||null}}
+  if(h&&h.boxes&&h.boxes.length){state.boxes=h.boxes.map(mkBoxFrom);if(h.profile)profileId=h.profile;state.cover=h.cover||null;state.bottom=h.bottom||null}}
  document.getElementById('apiaryView').style.display='none';document.getElementById('inspectView').style.display='';
  bindHeader();render();loadHistory();window.scrollTo(0,0);
 }
 function newHive(){const name=(prompt('Name this hive','New hive')||'').trim();if(!name)return;
  const boxes=defaultState().boxes.map(b=>({sys:b.sys,frames:b.frames.length,label:b.label,body:b.body,accent:b.accent}));
- saveHive({name,hemi,boxes,cover:null,bottom:null}).then(()=>openHive(name));
+ saveHive({name,profile:profileId,boxes,cover:null,bottom:null}).then(()=>openHive(name));
 }
 async function removeHive(name){await Store.remove('hivegrade:hive:'+name);for(const k of await Store.list(`hivegrade:insp:${name}:`)){await Store.remove(k)}renderApiary()}
 
 /* ---------------- boot ---------------- */
 (async function(){const c=await Store.get('hivegrade:cats');if(c){try{catOverrides=JSON.parse(c)}catch(e){}}
- const h=await Store.get('hivegrade:hemi');if(h)hemi=h;
+ const pr=await Store.get('hivegrade:profile');if(pr)profileId=pr;
  state=defaultState();applyCatColors();
  await renderApiary();
  document.getElementById('apiaryView').style.display='';document.getElementById('inspectView').style.display='none';
