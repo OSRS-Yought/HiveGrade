@@ -439,11 +439,28 @@ const STAGES=[
 /* label = "Region · Zone". months: stageId -> [calendar months]. floors: stageId -> {stores:%,
    pollen:[lo,hi], floorLb:winter honey lb}. src: region calendar basis (text, not a verified link;
    per-number verified citations land with the in-app "why" feature). */
+/* ---- Maritime Northwest (west of the Cascade crest) ----
+   One calendar across the whole maritime zone band (7b to 9b): blackberry main flow mid-Jun to Jul,
+   hard summer dearth, no real fall flow, long damp winter. Calendar basis: WSU/OSU Extension and WSBA
+   forage + overwintering; stage targets after Oliver. East of the crest (Columbia Basin, Spokane,
+   Idaho panhandle) is a DIFFERENT calendar and ships later under its own label, not as a colder NW.
+   FLOORS ARE SHARED ACROSS THE BAND (T3, judgment call). Maritime winter survival is limited by
+   duration and damp, not by cold, so floorLb does not scale down cleanly from 8b's 60 lb just because
+   a coastal zone reads as milder. A 9a colony still clusters for months on cool wet weather. Rather
+   than invent per-zone winter-weight precision the sources do not give maritime-side, every zone uses
+   the verified 8b floors. Per-zone refinement stays open pending real overwintering-weight data.
+   Full rationale + tiering: HiveGrade-Rubric-and-Bee-Logic.md section 1. */
+const NW_MONTHS={overwinter:[12,1],latewinter:[2],buildup:[3,4],swarm:[5],flow:[6,7],dearth:[8,9],fallprep:[10,11]};
+const NW_FLOORS={overwinter:{stores:55,pollen:[10,20],floorLb:60},latewinter:{stores:40,pollen:[10,20],floorLb:0},buildup:{stores:15,pollen:[6,20],floorLb:0},swarm:{stores:20,pollen:[6,20],floorLb:0},flow:{stores:30,pollen:[4,15],floorLb:0},dearth:{stores:45,pollen:[8,15],floorLb:0},fallprep:{stores:55,pollen:[10,20],floorLb:60}};
+const nwMaritime=z=>({label:'Northwest · '+z,region:'Northwest',zone:z,hemi:'N',
+  src:'Maritime Northwest (west of Cascades): blackberry main flow mid-Jun to Jul, summer dearth, no fall flow, long damp winter. Calendar from WSU/OSU Extension and WSBA; stage targets after Oliver. Floors shared across the maritime band (7b to 9b) as a judgment call: maritime winter survival is duration and damp limited, not cold limited, so the verified 8b floors apply band-wide pending per-zone overwintering data.',
+  months:NW_MONTHS,floors:NW_FLOORS});
 const PROFILES={
- nw_8b:{label:'Northwest · 8b',region:'Northwest',zone:'8b',hemi:'N',
-  src:'PNW calibration — WSU Extension / WSBA forage & overwintering (maritime zone 8b); stage targets after Oliver',
-  months:{overwinter:[12,1],latewinter:[2],buildup:[3,4],swarm:[5],flow:[6,7],dearth:[8,9],fallprep:[10,11]},
-  floors:{overwinter:{stores:55,pollen:[10,20],floorLb:60},latewinter:{stores:40,pollen:[10,20],floorLb:0},buildup:{stores:15,pollen:[6,20],floorLb:0},swarm:{stores:20,pollen:[6,20],floorLb:0},flow:{stores:30,pollen:[4,15],floorLb:0},dearth:{stores:45,pollen:[8,15],floorLb:0},fallprep:{stores:55,pollen:[10,20],floorLb:60}}}
+ nw_7b:nwMaritime('7b'),
+ nw_8a:nwMaritime('8a'),
+ nw_8b:nwMaritime('8b'),
+ nw_9a:nwMaritime('9a'),
+ nw_9b:nwMaritime('9b')
 };
 function PROF(){return (profileId&&PROFILES[profileId])||null}
 function regionList(){const seen=new Set(),out=[];Object.values(PROFILES).forEach(p=>{if(!seen.has(p.region)){seen.add(p.region);out.push(p.region)}});return out}
