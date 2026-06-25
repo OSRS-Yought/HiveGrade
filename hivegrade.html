@@ -125,6 +125,17 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
 .cfgname{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:9px 11px;font-size:14px}
 .cfgname:focus{outline:none;border-color:var(--amber)}
 .cfgnameerr{color:var(--brick);font-size:12px;margin-top:6px;line-height:1.4}
+.provtier{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:6px;border:1px solid var(--line);margin:2px 0 10px}
+.provtier.t1{color:#bfe3b0;background:#1f3a1c;border-color:#33632c}
+.provtier.t2{color:#e8c98a;background:#3a2f17;border-color:#6a5326}
+.provtier.t3{color:var(--ink-dim);background:var(--panel-2)}
+.provwhy{font-size:14px;line-height:1.55;color:var(--ink)}
+.provbasis{font-size:12px;line-height:1.5;color:var(--ink-faint);margin-top:9px}
+.provsrc{display:inline-block;margin-top:12px;font-size:12.5px;color:var(--amber-soft);text-decoration:none}
+.gstage.prov-tap{cursor:pointer}
+.gstage.prov-tap::after{content:' ⓘ';color:var(--ink-faint);font-size:10px}
+.rfac.prov-tap .rname{cursor:pointer}
+.rfac.prov-tap .rname::after{content:' ⓘ';color:var(--ink-faint);font-size:9px}
 .cfgPreview svg{display:block}
 .bbrow input[type=color]{width:34px;height:30px;padding:2px}
 .bbrow input.fr{width:54px} .bbrow .del{background:transparent;border:none;color:var(--ink-faint);font-size:16px} .bbrow .del:hover{color:var(--brick)}
@@ -318,6 +329,15 @@ header.top h1 .hl{color:var(--amber)} header.top .sub{color:var(--ink-dim);font-
   <p style="font-size:13px;color:var(--ink-dim);line-height:1.55;margin:0 0 12px">Your zone is set by average winter lows — it drives the overwintering numbers. Look it up by ZIP, then pick it here.</p>
   <a href="https://planthardiness.ars.usda.gov" target="_blank" rel="noopener" class="btn primary" style="display:inline-block;text-decoration:none">USDA Zone Finder →</a>
   <div class="ebtns" style="margin-top:14px"><button class="btn ghost" id="zoneClose">Close</button></div>
+</div></div>
+
+<!-- provenance -->
+<div class="overlay" id="provOverlay"><div class="modal" style="width:min(380px,100%)">
+  <div class="mhead"><div><h3 id="provTitle">Why this number</h3><div class="esub" id="provParam"></div></div><button class="x" id="provClose">&times;</button></div>
+  <div id="provTier" class="provtier"></div>
+  <div id="provWhy" class="provwhy"></div>
+  <div id="provBasis" class="provbasis"></div>
+  <a id="provSrc" class="provsrc" target="_blank" rel="noopener" style="display:none"></a>
 </div></div>
 
 <!-- report -->
@@ -530,13 +550,14 @@ function renderLegend(){const l=document.getElementById('legend');l.innerHTML=''
 function renderGrade(){const g=grade();if(!g)return gradeGated();
  document.getElementById('gLetter').textContent=g.lc.letter;
  document.getElementById('gLetter').style.color=g.lc.color;
- document.getElementById('gStage').textContent=g.s.name+' · '+state.date;
+ curStageId=g.s.id;
+ {const gs=document.getElementById('gStage');gs.textContent=g.s.name+' · '+state.date;gs.classList.add('prov-tap');}
  document.getElementById('gScore').textContent=`Score ${Math.round(g.base)}/100`;
  const mtr=document.getElementById('gMeter');mtr.style.width=g.base+'%';mtr.style.background=g.lc.color;
  const labels={brood:'Brood',stores:'Stores',pollen:'Pollen',pattern:'Pattern'};
  document.getElementById('gReason').innerHTML=Object.keys(labels).map(k=>{const v=Math.round(g.f[k]);
    const col=v>=85?cssVar('--c-cb'):v>=60?cssVar('--amber'):cssVar('--brick');
-   return `<div class="rfac"><span class="rname">${labels[k]} <span class="faint" style="font-size:10px">×${g.s.w[k]}</span></span><span class="rbar"><i style="width:${v}%;background:${col}"></i></span><span class="rval">${v}</span></div>`}).join('');
+   return `<div class="rfac prov-tap" data-prov="${k}"><span class="rname">${labels[k]} <span class="faint" style="font-size:10px">×${g.s.w[k]}</span></span><span class="rbar"><i style="width:${v}%;background:${col}"></i></span><span class="rval">${v}</span></div>`}).join('');
  document.getElementById('gMods').innerHTML=g.mods.map(md=>`<div class="rmod ${md.t}">${md.txt}</div>`).join('');renderRecs()}
 
 function metric(k,v){return `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`}
@@ -575,6 +596,82 @@ const SRC={
  feed:{u:'https://scientificbeekeeping.com/fat-bees-part-2/',t:'Randy Oliver — colony nutrition'},
  pollen:{u:'https://scientificbeekeeping.com/fat-bees-part-2/',t:'Randy Oliver — protein & pollen'}
 };
+/* ---------- in-app provenance: tier + bee reason, tappable from the grade card.
+   T1 sourced · T2 calibrated to NW 8b · T3 seasonal judgment. The "why" gives the bee reason for the
+   season only; the tier badge and source carry the sourcing. Canonical text: Rubric-and-Bee-Logic.md.
+   Coverage (phase 1): the active stage + the four scored factors. ---------- */
+const TIER={
+ T1:{lab:'Sourced',cls:'t1',basis:'A directly sourced figure.'},
+ T2:{lab:'Calibrated · NW 8b',cls:'t2',basis:'Calibrated to the maritime Northwest (zone 8b) from Oliver, Farrar, and WSU/WSBA guidance.'},
+ T3:{lab:'Judgment call',cls:'t3',basis:'A seasonal weighting set by judgment, informed by the sources but not a published number.'}
+};
+const FACLBL={brood:'Brood',stores:'Stores',pollen:'Pollen',pattern:'Pattern'};
+const PROV={
+ stage:{
+  overwinter:{t:'T2',why:'Dec–Jan in the maritime Northwest. The cluster raises little or no brood and lives on what it stored. They want roughly 60 lb of honey and a few frames of pollen to reach spring.'},
+  latewinter:{t:'T2',why:'February. The queen is starting to lay again but forage is still thin. This is the starvation window: a colony can look fine in January and starve in February with new brood to feed.'},
+  buildup:{t:'T2',why:'Mar–Apr. Maple and dandelion bring the first real pollen and the colony pours it into raising bees ahead of the flow. Stores get spent on population, so a lighter larder now is normal.'},
+  swarm:{t:'T2',why:'May. The colony is at full strength and crowding is the risk. Strong brood is expected; the job is staying ahead of swarm cells.'},
+  flow:{t:'T2',why:'Jun–Jul, blackberry and the main nectar. Bees are storing surplus and the larder climbs back up. Brood stays strong to keep foragers coming.'},
+  dearth:{t:'T2',why:'Aug–Sep. The flow is over and the bees raised now are the winter bees that must live for months. Pollen and a clean nest matter more than sheer numbers.'},
+  fallprep:{t:'T2',why:'Oct–Nov. Brood-rearing winds down and the colony packs in the last stores. They want to enter winter near 60 lb of honey with pollen on hand.'}
+ },
+ factor:{
+  brood:{
+   overwinter:{t:'T3',why:'Almost no brood is expected mid-winter, so an empty nest now is fine rather than a fault. The first patches in late winter are a good sign the queen is starting up.'},
+   latewinter:{t:'T3',why:'The first brood of the year. Seeing it return on schedule says the queen wintered well and the colony is waking up.'},
+   buildup:{t:'T3',why:'Population is the whole game in spring. The colony has to build a big force before the flow, so frames of brood are the headline reading this month.'},
+   swarm:{t:'T3',why:'A strong brood nest is expected at peak. Watch that it stays organized and that they are not packing in so tight they decide to swarm.'},
+   flow:{t:'T3',why:'Steady brood keeps foragers on the wing through the flow. It matters, but stores are climbing now too, so it shares the load.'},
+   dearth:{t:'T3',why:'Brood now becomes your winter bees. Healthy late-season brood counts for more than a huge nest.'},
+   fallprep:{t:'T3',why:'Brood-rearing is meant to taper off. A nest winding down is normal heading into winter, so it carries little weight.'}
+  },
+  stores:{
+   overwinter:{t:'T3',src:'feed',why:'Through winter the larder is survival. Nothing is coming in, so whatever honey is in the comb is all they have until spring.'},
+   latewinter:{t:'T3',src:'feed',why:'Still the danger season for stores. New brood needs feeding and early forage is unreliable, so a light larder can turn into starvation fast.'},
+   buildup:{t:'T3',src:'feed',why:'Stores run down as the colony spends them raising bees. A lighter larder during the build is expected as long as forage is coming in.'},
+   swarm:{t:'T3',why:'Fresh nectar is arriving and the colony is using stores to grow. Reserves matter less now than space and brood.'},
+   flow:{t:'T3',why:'The larder climbs back through the flow. Watch it building toward the surplus you will harvest and the weight they will winter on.'},
+   dearth:{t:'T3',src:'feed',why:'With the flow over, the colony lives on reserves again and starts repacking for winter, so stores climb back in importance.'},
+   fallprep:{t:'T3',src:'feed',why:'The last push to get the larder up to winter weight. A short colony needs feeding now, before it turns cold.'}
+  },
+  pollen:{
+   overwinter:{t:'T3',src:'pollen',why:'Stored pollen feeds the first brood when the queen restarts. A few frames banked beside the cluster is what you want going into winter.'},
+   latewinter:{t:'T3',src:'pollen',why:'Protein for the first brood of the year. Stored pollen carries them until the maples open.'},
+   buildup:{t:'T3',src:'pollen',why:'Pollen is protein and protein is brood. The spring build runs on it, so it stays weighted even as fresh pollen pours in.'},
+   swarm:{t:'T3',src:'pollen',why:'Plenty of pollen is coming in at peak. A low standing reading usually means they are using it as fast as it arrives, not that they are short.'},
+   flow:{t:'T3',src:'pollen',why:'Pollen comes in faster than it is stored during the flow, so a low standing reading mid-flow is normal, not a shortage.'},
+   dearth:{t:'T3',src:'pollen',why:'Forage thins out but the winter bees being raised need good protein, so short pollen now is worth watching.'},
+   fallprep:{t:'T3',src:'pollen',why:'Stored pollen is the buffer for late brood and early spring. You want some banked before winter shuts foraging down.'}
+  },
+  pattern:{
+   overwinter:{t:'T3',why:'There is little brood to judge mid-winter, so pattern barely figures. Whatever small patch there is should still look tidy.'},
+   latewinter:{t:'T3',why:'Not much brood yet, so pattern is a minor read. A solid first patch is reassuring all the same.'},
+   buildup:{t:'T3',why:'A solid, contiguous pattern says the queen is laying well as the colony ramps up. Scattered or spotty brood is the early warning to watch.'},
+   swarm:{t:'T3',why:'Tight, solid brood at peak points to a good queen. Patchiness in a strong colony is worth a second look.'},
+   flow:{t:'T3',why:'Pattern reflects queen quality while she is laying hard through the flow. You want solid combs, not shotgun brood.'},
+   dearth:{t:'T3',why:'This is when pattern matters most. The winter bees come from this brood, so a clean, solid pattern carries real weight now.'},
+   fallprep:{t:'T3',why:'The last brood of the year. A tidy pattern is a good sign, but the nest is winding down so it weighs less than stores.'}
+  }
+ }
+};
+let curStageId=null;
+function openProv(kind,key){let e,title;
+ if(kind==='stage'){e=PROV.stage[curStageId];title=((STAGES.find(s=>s.id===curStageId)||{}).name||'Season')+' season';}
+ else{e=(PROV.factor[key]||{})[curStageId];title=(FACLBL[key]||'Factor')+' weight';}
+ if(!e)return;const tm=TIER[e.t]||TIER.T3;
+ document.getElementById('provTitle').textContent=title;
+ document.getElementById('provParam').textContent=kind==='stage'?'When and why, this time of year':'Why it weighs what it does now';
+ const tb=document.getElementById('provTier');tb.textContent=tm.lab;tb.className='provtier '+tm.cls;
+ document.getElementById('provWhy').textContent=e.why;
+ document.getElementById('provBasis').textContent=tm.basis;
+ const sc=document.getElementById('provSrc'),s=e.src&&SRC[e.src];
+ if(s){sc.href=s.u;sc.textContent=s.t+' →';sc.style.display='inline-block';}else sc.style.display='none';
+ document.getElementById('provOverlay').classList.add('show');}
+function closeProv(){document.getElementById('provOverlay').classList.remove('show');}
+{const gs=document.getElementById('gStage');if(gs)gs.onclick=()=>{if(curStageId)openProv('stage');};}
+{const gr=document.getElementById('gReason');if(gr)gr.onclick=e=>{const row=e.target.closest('.rfac[data-prov]');if(row)openProv('factor',row.dataset.prov);};}
+{const pc=document.getElementById('provClose');if(pc)pc.onclick=closeProv;const po=document.getElementById('provOverlay');if(po)po.onclick=e=>{if(e.target.id==='provOverlay')closeProv();};}
 function recommend(){const p=PROF();if(!p)return [];const m=compute(),s=stageFor(state.date,p),r=[];
  const storesShort=m.storesPct<s.stores[0], pollenShort=m.pollenPct<s.pollen[0];
  const cold=(s.id==='fallprep'||s.id==='overwinter'||s.id==='dearth');
@@ -722,7 +819,7 @@ function renderRegion(){const rs=document.getElementById('regionSel');if(!rs)ret
  const zh=document.getElementById('zoneHelp');if(zh)zh.onclick=()=>document.getElementById('zoneOverlay').classList.add('show')}
 function applyProfile(){if(profileId)Store.set('hivegrade:profile',profileId);renderGrade();renderFlags()}
 function gradeGated(){const gl=document.getElementById('gLetter');if(gl){gl.textContent='–';gl.style.color='var(--ink-dim)'}
- const st=document.getElementById('gStage');if(st)st.textContent='No region set';
+ const st=document.getElementById('gStage');if(st){st.textContent='No region set';st.classList.remove('prov-tap');}curStageId=null;
  const sc=document.getElementById('gScore');if(sc)sc.textContent='Select a region to grade';
  const mtr=document.getElementById('gMeter');if(mtr)mtr.style.width='0%';
  const gr=document.getElementById('gReason');if(gr)gr.innerHTML='<div class="faint" style="font-size:12.5px;padding:6px 0;line-height:1.5">Grading is region-specific. Open <b>Hive &amp; colors</b> and choose your region &amp; zone to begin grading this hive.</div>';
@@ -787,6 +884,8 @@ function openReport(){const g=grade();if(!g){document.getElementById('rptBody').
  const recs=recommend();const recsHtml=recs.map(x=>{const c=x.p==='urgent'?'#8c1d1d':x.p==='soon'?'#9a6a1c':'#3a6a2e';const lk=x.src&&SRC[x.src]?` <a href="${SRC[x.src].u}" style="color:#9a6a1c">learn more →</a>`:'';return `<li><b style="color:${c}">${x.a}</b>${x.w?' — '+x.w:''}${lk}</li>`}).join('');
  const facRows=['brood','stores','pollen','pattern'].map(k=>`${k[0].toUpperCase()+k.slice(1)} ${Math.round(g.f[k])}/100 (w ${g.s.w[k]})`).join(' · ');
  const modRows=g.mods.length?g.mods.map(x=>x.txt).join(' · '):'None';
+ const provLine=(label,e)=>{const tm=TIER[e.t]||TIER.T3;const s=e.src&&SRC[e.src];return `<tr><td style="padding:3px 10px 3px 0;color:#3a2e1c;white-space:nowrap">${label}</td><td style="padding:3px 0;color:#6a5a3e">${tm.lab}${s?' · '+s.t:''}</td></tr>`};
+ const provSec=(PROF()&&PROV.stage[g.s.id])?`<div class="rpt-sec"><h3>Sources &amp; calibration</h3><table style="font-size:11px;border-collapse:collapse">${provLine(g.s.name+' season',PROV.stage[g.s.id])}${['brood','stores','pollen','pattern'].map(k=>provLine(FACLBL[k]+' weight ×'+g.s.w[k],(PROV.factor[k]||{})[g.s.id]||{t:'T3'})).join('')}</table><div style="font-size:10px;color:#8a795c;margin-top:6px">Tiers: Sourced, Calibrated (NW 8b), Judgment call. Full rationale in HiveGrade's rubric doc.</div></div>`:'';
  // FrameMap legend (report): only categories present, with a non-color code (the data key) so it
  // survives grayscale print, plus the hatch = unlogged. The per-box % line above is the B&W-safe aggregate.
  const lgChip=(bg,code,name)=>`<span style="display:inline-flex;align-items:center;gap:4px;margin:0 11px 5px 0;font-size:9.5px;color:#5a4a36;white-space:nowrap"><span style="width:11px;height:11px;border-radius:2px;background:${bg};border:1px solid #00000026;flex:none"></span><b style="font-family:var(--mono);font-size:9px">${code}</b> ${name}</span>`;
@@ -814,6 +913,7 @@ function openReport(){const g=grade();if(!g){document.getElementById('rptBody').
   <div class="rpt-sec"><h3>FrameMap</h3>${fmap}${fmapLegend}</div>
   <div class="rpt-sec"><h3>What to do next</h3><ul>${recsHtml||'<li>Log frames to get recommendations.</li>'}</ul></div>
   ${state.notes?`<div class="rpt-sec"><h3>Notes</h3><div style="font-size:13px;color:#3a2e1c">${state.notes}</div></div>`:''}
+  ${provSec}
   <div class="rpt-foot">How this grade was built — factors: ${facRows}. Modifiers: ${modRows}.</div>`;
  document.getElementById('reportOverlay').classList.add('show')}
 document.getElementById('btnReport').onclick=openReport;
