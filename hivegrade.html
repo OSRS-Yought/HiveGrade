@@ -852,7 +852,7 @@ async function loadHistory(){if(!state)return;const pre='hivegrade:insp:'+state.
 
 /* ---------------- summarize (JSON) ---------------- */
 document.getElementById('btnJSON').onclick=()=>{const g=grade();if(!g)return;const m=g.m;
- const payload={app:'HiveGrade',hive:state.hive,date:state.date,season_stage:g.s.name,
+ const payload={app:'HiveGrade',kind:'report',hive:state.hive,date:state.date,season_stage:g.s.name,
   grade:g.lc.letter,score:Math.round(g.base),
   hive_layout:state.boxes.map(b=>({box:b.label,system:SYSTEMS[b.sys].name,frames:b.frames.length})),
   queen:{seen:state.queenSeen,eggs_seen:state.eggsSeen,mark:state.mark||null,cells:state.cellN,cell_stage:state.cellS},
@@ -943,13 +943,18 @@ async function exportAll(){const dump={app:'HiveGrade',kind:'backup',exported:ne
  const pr=await Store.get('hivegrade:profile');if(pr)dump.data['hivegrade:profile']=pr;
  download(`hivegrade-backup-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(dump,null,2),'application/json')}
 document.getElementById('importFile').onchange=e=>{const file=e.target.files[0];if(!file)return;const rd=new FileReader();
- rd.onload=async()=>{let obj;try{obj=JSON.parse(rd.result)}catch(err){alert('Could not read that file — not valid JSON.');return}
-  const data=obj&&obj.data?obj.data:obj;if(!data||typeof data!=='object'){alert('No HiveGrade data found in that file.');return}
+ rd.onload=async()=>{let obj;try{obj=JSON.parse(rd.result)}catch(err){alert('Could not read that file. It is not valid JSON.');return}
+  if(obj&&obj.app==='HiveGrade'&&obj.kind==='report'){alert('That file is a single-inspection report, not a backup. To move your data, use the Export button on the apiary screen.');return}
+  const data=(obj&&obj.kind==='backup'&&obj.data&&typeof obj.data==='object')?obj.data:null;
+  if(!data){alert('That file is not a HiveGrade backup.');return}
   let n=0;for(const k of Object.keys(data)){if(k.startsWith('hivegrade:')){await Store.set(k,typeof data[k]==='string'?data[k]:JSON.stringify(data[k]));n++}}
   const c=await Store.get('hivegrade:cats');if(c){try{catOverrides=JSON.parse(c)}catch(_){}}
   const pr=await Store.get('hivegrade:profile');if(pr)profileId=pr;
+  const unknown=[];for(const k of await Store.list('hivegrade:hive:')){const raw=await Store.get(k);if(!raw)continue;try{const h=JSON.parse(raw);if(h.profile&&!PROFILES[h.profile])unknown.push(h.name||k.slice(15))}catch(_){}}
   await loadHistory();if(typeof renderApiary==='function')renderApiary();render();
-  alert(`Imported ${n} record${n===1?'':'s'}. Merged by key — only matching records were replaced.`)};
+  let msg=`Imported ${n} record${n===1?'':'s'}. Records matching by key were replaced; everything else was left as is.`;
+  if(unknown.length)msg+=` These hives use a region this app version does not have, so they cannot be graded until you pick a region: ${unknown.join(', ')}.`;
+  alert(msg)};
  rd.readAsText(file);e.target.value=''};
 document.getElementById('btnNew').onclick=()=>{if(!confirm('Start a fresh inspection? Unsaved frame data clears.'))return;const boxes=state.boxes.map(b=>{const nb=mkBox(b.sys,b.label);nb.body=b.body;nb.accent=b.accent;nb.frames=Array.from({length:b.frames.length},(_,i)=>blankFrame(i+1));return nb});state=defaultState();state.boxes=boxes;bindHeader();render()};
 
